@@ -49,12 +49,15 @@ EOF
 "$DOKKU_BIN" docker-options:report "$APP" > "$SNAPSHOT_DIR/docker-options.txt" 2>/dev/null || true
 
 # Detect and export linked services
-detect_linked_services "$APP" | while read -r svc_type svc_name; do
+# Use fd 3 for the loop input so that commands inside the loop keep their
+# original stdin.  Dokku plugin commands (basher dispatch) fail when stdin
+# is a pipe, which is what happens with a plain `cmd | while read` construct.
+while read -r svc_type svc_name <&3; do
   [[ -z "$svc_type" || -z "$svc_name" ]] && continue
   echo "       Exporting $svc_type service: $svc_name"
   mkdir -p "$SNAPSHOT_DIR/services/$svc_type"
   export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
-done || true
+done 3< <(detect_linked_services "$APP") || true
 
 echo "-----> Snapshot created: $TIMESTAMP"
 echo "       Location: $SNAPSHOT_DIR"
