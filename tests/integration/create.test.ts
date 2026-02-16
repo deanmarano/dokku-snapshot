@@ -115,6 +115,10 @@ describe('snapshot:create', () => {
   });
 
   it('detects and exports linked postgres service', async () => {
+    if (!dokku.isPostgresAvailable()) {
+      console.log('Skipping: postgres plugin not functional');
+      return;
+    }
     dokku.createTestApp('snap-pg-test');
     dokku.createPostgresService('snap-pg-svc');
     dokku.linkPostgres('snap-pg-svc', 'snap-pg-test');

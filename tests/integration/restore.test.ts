@@ -93,6 +93,10 @@ describe('snapshot:restore', () => {
   });
 
   it('imports service data on restore', async () => {
+    if (!dokku.isPostgresAvailable()) {
+      console.log('Skipping: postgres plugin not functional');
+      return;
+    }
     dokku.createTestApp('snap-restore-pg');
     dokku.createPostgresService('snap-restore-pg-svc');
     dokku.linkPostgres('snap-restore-pg-svc', 'snap-restore-pg');

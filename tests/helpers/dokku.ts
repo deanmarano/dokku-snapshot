@@ -166,6 +166,16 @@ export class DokkuSnapshot {
     }
   }
 
+  /** Check if postgres plugin commands are available and functional */
+  isPostgresAvailable(): boolean {
+    try {
+      this.runDokku('postgres:list');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Create a postgres service and track for cleanup */
   createPostgresService(name: string): void {
     this.runDokku('postgres:create', name);
