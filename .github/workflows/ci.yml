@@ -55,7 +55,8 @@ jobs:
 
       - name: Install dokku-postgres
         run: |
-          sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres
+          sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres || true
+          sudo dokku postgres:help
 
       - name: Run integration tests
         run: npm run test:integration
