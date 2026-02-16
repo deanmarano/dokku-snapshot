@@ -366,11 +366,43 @@ if [[ -d "$SNAPSHOT_DIR/services" ]]; then
     [[ -d "$svc_type_dir" ]] || continue
     svc_type=$(basename "$svc_type_dir")
 
-    for dump_file in "$svc_type_dir"*.dump; do
-      [[ -f "$dump_file" ]] || continue
-      svc_name=$(basename "$dump_file" .dump)
-      echo "       Importing $svc_type service: $svc_name"
-      import_service "$svc_type" "$svc_name" "$dump_file" || true
+    # Collect unique service names from both .dump and .info files
+    local_svc_names=()
+    for svc_file in "$svc_type_dir"*.dump "$svc_type_dir"*.info; do
+      [[ -f "$svc_file" ]] || continue
+      fname=$(basename "$svc_file")
+      sname="${fname%.*}"
+      # Add if not already in list
+      already=false
+      for existing in "${local_svc_names[@]:-}"; do
+        [[ "$existing" == "$sname" ]] && already=true && break
+      done
+      [[ "$already" == "false" ]] && local_svc_names+=("$sname")
+    done
+
+    for svc_name in "${local_svc_names[@]:-}"; do
+      [[ -z "$svc_name" ]] && continue
+      echo "       Restoring $svc_type service: $svc_name"
+
+      # Show version info from .info file if available
+      info_file="$svc_type_dir$svc_name.info"
+      if [[ -f "$info_file" ]]; then
+        snapshot_svc_version=$(grep -oP 'Version:\s*\K.*' "$info_file" | tr -d ' ') || true
+        if [[ -n "$snapshot_svc_version" ]]; then
+          echo "       Snapshot version: $snapshot_svc_version"
+          current_svc_version=$("$DOKKU_BIN" "$svc_type:info" "$svc_name" 2>/dev/null | grep -oP 'Version:\s*\K.*' | tr -d ' ') || true
+          if [[ -n "$current_svc_version" && "$snapshot_svc_version" != "$current_svc_version" ]]; then
+            echo "!      Warning: Current $svc_type version ($current_svc_version) differs from snapshot ($snapshot_svc_version)"
+          fi
+        fi
+      fi
+
+      # Import data if dump file exists
+      dump_file="$svc_type_dir$svc_name.dump"
+      if [[ -f "$dump_file" ]]; then
+        echo "       Importing $svc_type service: $svc_name"
+        import_service "$svc_type" "$svc_name" "$dump_file" || true
+      fi
     done
   done
 fi

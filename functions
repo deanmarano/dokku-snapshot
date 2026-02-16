@@ -49,6 +49,14 @@ export_service() {
   fi
 }
 
+# Export a service's info/metadata to a file
+export_service_info() {
+  local TYPE="$1"
+  local NAME="$2"
+  local OUTPUT_FILE="$3"
+  "$DOKKU_BIN" "$TYPE:info" "$NAME" > "$OUTPUT_FILE" 2>/dev/null || true
+}
+
 # Import service data from a file
 import_service() {
   local TYPE="$1"

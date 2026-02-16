@@ -33,7 +33,7 @@ cat > "$SNAPSHOT_DIR/metadata.json" << EOF
   "app": "$APP",
   "timestamp": "$TIMESTAMP",
   "dokku_version": "$("$DOKKU_BIN" version 2>/dev/null || echo "unknown")",
-  "snapshot_version": "2"
+  "snapshot_version": "3"
 }
 EOF
 
@@ -70,6 +70,7 @@ while read -r svc_type svc_name <&3; do
   [[ -z "$svc_type" || -z "$svc_name" ]] && continue
   echo "       Exporting $svc_type service: $svc_name"
   mkdir -p "$SNAPSHOT_DIR/services/$svc_type"
+  export_service_info "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.info"
   export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
 done 3< <(detect_linked_services "$APP") || true
 

@@ -188,6 +188,15 @@ export class DokkuSnapshot {
     this.runDokku('postgres:link', service, app);
   }
 
+  /** Get service info output */
+  getServiceInfo(type: string, name: string): string {
+    try {
+      return this.runDokku(`${type}:info`, name);
+    } catch {
+      return '';
+    }
+  }
+
   /** Cleanup all created apps and services */
   async cleanup(): Promise<void> {
     for (const { type, name } of [...this.services].reverse()) {

@@ -90,7 +90,7 @@ describe('snapshot:create', () => {
     );
     expect(metadata.app).toBe('snap-meta-test');
     expect(metadata.timestamp).toBe(snapshotId);
-    expect(metadata.snapshot_version).toBe('2');
+    expect(metadata.snapshot_version).toBe('3');
     expect(metadata.dokku_version).toBeTruthy();
   });
 
@@ -147,7 +147,7 @@ describe('snapshot:create', () => {
     expect(git).toContain('production');
   });
 
-  it('captures v2 metadata', async () => {
+  it('captures v3 metadata with snapshot_version field', async () => {
     dokku.createTestApp('snap-v2-test');
 
     const result = await dokku.exec('create', 'snap-v2-test');
@@ -159,7 +159,7 @@ describe('snapshot:create', () => {
     const metadata = JSON.parse(
       dokku.readFile(`${PLUGIN_DATA_ROOT}/snap-v2-test/${snapshotId}/metadata.json`)
     );
-    expect(metadata.snapshot_version).toBe('2');
+    expect(metadata.snapshot_version).toBe('3');
   });
 
   it('handles missing optional plugins gracefully', async () => {
@@ -217,5 +217,39 @@ describe('snapshot:create', () => {
 
     const dumpPath = `${PLUGIN_DATA_ROOT}/snap-pg-test/${snapshotId}/services/postgres/snap-pg-svc.dump`;
     expect(dokku.pathExists(dumpPath)).toBe(true);
+  });
+
+  it('captures service info alongside dump', async () => {
+    dokku.createTestApp('snap-info-test');
+    dokku.createPostgresService('snap-info-svc');
+    dokku.linkPostgres('snap-info-svc', 'snap-info-test');
+
+    const result = await dokku.exec('create', 'snap-info-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    const svcDir = `${PLUGIN_DATA_ROOT}/snap-info-test/${snapshotId}/services/postgres`;
+    expect(dokku.pathExists(`${svcDir}/snap-info-svc.dump`)).toBe(true);
+    expect(dokku.pathExists(`${svcDir}/snap-info-svc.info`)).toBe(true);
+
+    const info = dokku.readFile(`${svcDir}/snap-info-svc.info`);
+    expect(info).toContain('Version');
+  });
+
+  it('captures v3 metadata', async () => {
+    dokku.createTestApp('snap-v3-test');
+
+    const result = await dokku.exec('create', 'snap-v3-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    const metadata = JSON.parse(
+      dokku.readFile(`${PLUGIN_DATA_ROOT}/snap-v3-test/${snapshotId}/metadata.json`)
+    );
+    expect(metadata.snapshot_version).toBe('3');
   });
 });

@@ -37,6 +37,17 @@ describe('snapshot:inspect', () => {
     expect(result.stdout).toContain('25m');
   });
 
+  it('shows service version in inspect', async () => {
+    dokku.createTestApp('snap-inspect-svc');
+    dokku.createPostgresService('snap-inspect-pg');
+    dokku.linkPostgres('snap-inspect-pg', 'snap-inspect-svc');
+
+    const result = await dokku.exec('inspect', 'snap-inspect-svc');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('postgres: snap-inspect-pg');
+    expect(result.stdout).toContain('Version:');
+  });
+
   it('fails for non-existent app', async () => {
     const result = await dokku.exec('inspect', 'snap-nonexistent-app');
     expect(result.exitCode).not.toBe(0);

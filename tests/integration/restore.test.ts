@@ -258,6 +258,23 @@ describe('snapshot:restore', () => {
     expect(config['MY_VAR']).toBe('test');
   });
 
+  it('displays service version on restore', async () => {
+    dokku.createTestApp('snap-restore-ver');
+    dokku.createPostgresService('snap-restore-ver-svc');
+    dokku.linkPostgres('snap-restore-ver-svc', 'snap-restore-ver');
+
+    // Create snapshot (includes postgres info + export)
+    const createResult = await dokku.exec('create', 'snap-restore-ver');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Restore (should display version info)
+    const restoreResult = await dokku.exec('restore', 'snap-restore-ver', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+    expect(restoreResult.stdout).toContain('Snapshot version:');
+  });
+
   it('imports service data on restore', async () => {
     dokku.createTestApp('snap-restore-pg');
     dokku.createPostgresService('snap-restore-pg-svc');

@@ -65,6 +65,13 @@ if [[ -n "$svc_list" ]]; then
   while read -r svc_type svc_name; do
     [[ -z "$svc_type" || -z "$svc_name" ]] && continue
     echo "       $svc_type: $svc_name"
+    svc_info=$("$DOKKU_BIN" "$svc_type:info" "$svc_name" 2>/dev/null) || true
+    if [[ -n "$svc_info" ]]; then
+      svc_version=$(echo "$svc_info" | grep -oP 'Version:\s*\K.*' | tr -d ' ') || true
+      svc_status=$(echo "$svc_info" | grep -oP 'Status:\s*\K.*' | tr -d ' ') || true
+      [[ -n "$svc_version" ]] && echo "         Version: $svc_version"
+      [[ -n "$svc_status" ]] && echo "         Status: $svc_status"
+    fi
   done <<< "$svc_list"
 else
   echo "       (none)"
