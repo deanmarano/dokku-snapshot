@@ -49,6 +49,11 @@ EOF
 "$DOKKU_BIN" docker-options:report "$APP" > "$SNAPSHOT_DIR/docker-options.txt" 2>/dev/null || true
 
 # Detect and export linked services
+echo "       DEBUG: config:show output for $APP:" >&2
+"$DOKKU_BIN" config:show "$APP" 2>/dev/null >&2 || echo "       DEBUG: config:show failed" >&2
+echo "       DEBUG: detect_linked_services output:" >&2
+detect_linked_services "$APP" >&2 || echo "       DEBUG: detect_linked_services failed" >&2
+
 # Use fd 3 for the loop input so that commands inside the loop keep their
 # original stdin.  Dokku plugin commands (basher dispatch) fail when stdin
 # is a pipe, which is what happens with a plain `cmd | while read` construct.
