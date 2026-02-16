@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
+source "$PLUGIN_BASE_PATH/functions"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+APP="$1"
+
+if [[ -z "$APP" ]]; then
+  echo "Usage: dokku snapshot:create <app>" >&2
+  exit 1
+fi
+
+# Verify app exists
+if ! "$DOKKU_BIN" apps:exists "$APP" 2>/dev/null; then
+  echo "!     App $APP does not exist" >&2
+  exit 1
+fi
+
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+SNAPSHOT_DIR="$PLUGIN_DATA_ROOT/$APP/$TIMESTAMP"
+
+echo "-----> Creating snapshot of $APP"
+
+mkdir -p "$SNAPSHOT_DIR/services"
+
+# Metadata
+cat > "$SNAPSHOT_DIR/metadata.json" << EOF
+{
+  "app": "$APP",
+  "timestamp": "$TIMESTAMP",
+  "dokku_version": "$("$DOKKU_BIN" version 2>/dev/null || echo "unknown")",
+  "snapshot_version": "1"
+}
+EOF
+
+# Config vars
+"$DOKKU_BIN" config:export "$APP" > "$SNAPSHOT_DIR/config.env" 2>/dev/null || true
+
+# Reports
+"$DOKKU_BIN" domains:report "$APP" > "$SNAPSHOT_DIR/domains.txt" 2>/dev/null || true
+"$DOKKU_BIN" proxy:report "$APP" > "$SNAPSHOT_DIR/proxy.txt" 2>/dev/null || true
+"$DOKKU_BIN" network:report "$APP" > "$SNAPSHOT_DIR/network.txt" 2>/dev/null || true
+"$DOKKU_BIN" storage:report "$APP" > "$SNAPSHOT_DIR/storage.txt" 2>/dev/null || true
+"$DOKKU_BIN" ps:report "$APP" > "$SNAPSHOT_DIR/ps.txt" 2>/dev/null || true
+"$DOKKU_BIN" docker-options:report "$APP" > "$SNAPSHOT_DIR/docker-options.txt" 2>/dev/null || true
+
+# Detect and export linked services
+detect_linked_services "$APP" | while read -r svc_type svc_name; do
+  [[ -z "$svc_type" || -z "$svc_name" ]] && continue
+  echo "       Exporting $svc_type service: $svc_name"
+  mkdir -p "$SNAPSHOT_DIR/services/$svc_type"
+  export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
+done
+
+echo "-----> Snapshot created: $TIMESTAMP"
+echo "       Location: $SNAPSHOT_DIR"

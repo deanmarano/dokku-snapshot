@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+APP="$1"
+
+if [[ -z "$APP" ]]; then
+  echo "Usage: dokku snapshot:list <app>" >&2
+  exit 1
+fi
+
+# Verify app exists
+if ! "$DOKKU_BIN" apps:exists "$APP" 2>/dev/null; then
+  echo "!     App $APP does not exist" >&2
+  exit 1
+fi
+
+APP_SNAPSHOT_DIR="$PLUGIN_DATA_ROOT/$APP"
+
+if [[ ! -d "$APP_SNAPSHOT_DIR" ]] || [[ -z "$(ls -A "$APP_SNAPSHOT_DIR" 2>/dev/null)" ]]; then
+  echo "No snapshots found for $APP"
+  exit 0
+fi
+
+echo "Snapshots for $APP:"
+for snapshot_dir in "$APP_SNAPSHOT_DIR"/*/; do
+  [[ -d "$snapshot_dir" ]] || continue
+  snapshot_id=$(basename "$snapshot_dir")
+  echo "  $snapshot_id"
+done

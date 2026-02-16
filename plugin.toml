@@ -1,0 +1,7 @@
+[plugin]
+description = "Snapshot and restore entire dokku app stacks"
+version = "0.1.0"
+authors = ["Dean Marano"]
+license = "MIT"
+
+[plugin.config]

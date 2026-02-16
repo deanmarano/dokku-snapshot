@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+# Detect linked services by parsing config vars.
+# Dokku service plugins set vars like DOKKU_POSTGRES_<COLOR>_NAME=<service-name> on link.
+# Outputs lines of: <type> <service-name>
+detect_linked_services() {
+  local APP="$1"
+  local config_output
+
+  config_output=$("$DOKKU_BIN" config:show "$APP" 2>/dev/null) || return 0
+
+  local SERVICE_TYPES=("postgres" "redis" "mysql" "mongo" "mariadb")
+
+  for svc_type in "${SERVICE_TYPES[@]}"; do
+    local upper_type
+    upper_type=$(echo "$svc_type" | tr '[:lower:]' '[:upper:]')
+    # Match DOKKU_<TYPE>_<COLOR>_NAME=<service-name>
+    echo "$config_output" | grep -oP "^DOKKU_${upper_type}_[A-Z_]+_NAME:\s*\K.*" | while read -r name; do
+      echo "$svc_type $name"
+    done
+  done
+}
+
+# Export a service's data to a file
+export_service() {
+  local TYPE="$1"
+  local NAME="$2"
+  local OUTPUT_FILE="$3"
+
+  if "$DOKKU_BIN" "$TYPE:export" "$NAME" > "$OUTPUT_FILE" 2>/dev/null; then
+    return 0
+  else
+    echo "!     Warning: Failed to export $TYPE service $NAME" >&2
+    rm -f "$OUTPUT_FILE"
+    return 1
+  fi
+}
+
+# Import service data from a file
+import_service() {
+  local TYPE="$1"
+  local NAME="$2"
+  local INPUT_FILE="$3"
+
+  if "$DOKKU_BIN" "$TYPE:import" "$NAME" < "$INPUT_FILE" 2>/dev/null; then
+    return 0
+  else
+    echo "!     Warning: Failed to import $TYPE service $NAME" >&2
+    return 1
+  fi
+}

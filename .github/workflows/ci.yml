@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, trunk]
+  pull_request:
+    branches: [main, trunk]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck on bash scripts
+        run: |
+          shellcheck -x commands config install functions
+          find subcommands -type f -exec shellcheck -x {} +
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Dokku
+        run: |
+          wget -NP . https://dokku.com/install/v0.35.15/bootstrap.sh
+          sudo DOKKU_TAG=v0.35.15 bash bootstrap.sh
+          sudo usermod -aG docker $USER
+          echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/dokku" | sudo tee /etc/sudoers.d/dokku-runner
+
+      - name: Install plugin
+        run: |
+          sudo mkdir -p /var/lib/dokku/plugins/available/snapshot
+          sudo cp -r ./* /var/lib/dokku/plugins/available/snapshot/
+          sudo ln -sf /var/lib/dokku/plugins/available/snapshot /var/lib/dokku/plugins/enabled/snapshot
+          sudo mkdir -p /var/lib/dokku/data/snapshot
+          sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
+          sudo dokku plugin:install-dependencies snapshot || true
+          sudo dokku snapshot:help
+
+      - name: Install dokku-postgres
+        run: |
+          sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          DOKKU_HOST: local
+          DOKKU_USE_SUDO: 'true'
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Dokku logs ==="
+          sudo dokku logs:failed 2>/dev/null || true
+          echo "=== Docker containers ==="
+          docker ps -a
+          echo "=== Snapshot data ==="
+          sudo ls -laR /var/lib/dokku/data/snapshot/ 2>/dev/null || true
