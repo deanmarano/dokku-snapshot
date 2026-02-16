@@ -92,6 +92,172 @@ describe('snapshot:restore', () => {
     expect(result.stderr).toContain('not found');
   });
 
+  it('restores port mappings', async () => {
+    dokku.createTestApp('snap-restore-ports');
+    dokku.setPortMap('snap-restore-ports', 'http:80:5000', 'https:443:5000');
+
+    const createResult = await dokku.exec('create', 'snap-restore-ports');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Clear ports
+    dokku.runDokku('ports:clear', 'snap-restore-ports');
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', 'snap-restore-ports', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify ports restored
+    const ports = dokku.getPortMap('snap-restore-ports');
+    expect(ports).toContain('http:80:5000');
+    expect(ports).toContain('https:443:5000');
+  });
+
+  it('restores docker options', async () => {
+    dokku.createTestApp('snap-restore-dopt');
+    dokku.setDockerOption('snap-restore-dopt', 'deploy', '--restart=always');
+
+    const createResult = await dokku.exec('create', 'snap-restore-dopt');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Remove option
+    try {
+      dokku.runDokku('docker-options:remove', 'snap-restore-dopt', 'deploy', '--restart=always');
+    } catch { /* may not exist */ }
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', 'snap-restore-dopt', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify option restored
+    const options = dokku.getDockerOptions('snap-restore-dopt');
+    expect(options).toContain('--restart=always');
+  });
+
+  it('restores git deploy branch', async () => {
+    dokku.createTestApp('snap-restore-git');
+    dokku.setGitProperty('snap-restore-git', 'deploy-branch', 'production');
+
+    const createResult = await dokku.exec('create', 'snap-restore-git');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Unset
+    dokku.setGitProperty('snap-restore-git', 'deploy-branch', '');
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', 'snap-restore-git', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify
+    const branch = dokku.getGitProperty('snap-restore-git', 'deploy-branch');
+    expect(branch).toBe('production');
+  });
+
+  it('restores proxy settings', async () => {
+    dokku.createTestApp('snap-restore-proxy');
+    dokku.setProxyEnabled('snap-restore-proxy', false);
+
+    const createResult = await dokku.exec('create', 'snap-restore-proxy');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Re-enable proxy
+    dokku.setProxyEnabled('snap-restore-proxy', true);
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', 'snap-restore-proxy', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify proxy is disabled again
+    const report = dokku.runDokku('proxy:report', 'snap-restore-proxy');
+    expect(report).toContain('false');
+  });
+
+  it('restores builder settings', async () => {
+    dokku.createTestApp('snap-restore-builder');
+    dokku.setBuilder('snap-restore-builder', 'dockerfile');
+
+    const createResult = await dokku.exec('create', 'snap-restore-builder');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Clear builder
+    dokku.runDokku('builder:set', 'snap-restore-builder', 'selected', '');
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', 'snap-restore-builder', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify
+    const report = dokku.runDokku('builder:report', 'snap-restore-builder');
+    expect(report).toContain('dockerfile');
+  });
+
+  it('restores nginx settings', async () => {
+    dokku.createTestApp('snap-restore-nginx');
+    dokku.setNginxProperty('snap-restore-nginx', 'client-max-body-size', '50m');
+
+    const createResult = await dokku.exec('create', 'snap-restore-nginx');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Clear nginx property
+    dokku.runDokku('nginx:set', 'snap-restore-nginx', 'client-max-body-size');
+
+    // Verify cleared
+    const before = dokku.getNginxProperty('snap-restore-nginx', 'client-max-body-size');
+    expect(before).toBe('');
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', 'snap-restore-nginx', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify
+    const after = dokku.getNginxProperty('snap-restore-nginx', 'client-max-body-size');
+    expect(after).toBe('50m');
+  });
+
+  it('handles v1 snapshot gracefully', async () => {
+    dokku.createTestApp('snap-restore-v1');
+    dokku.setAppConfig('snap-restore-v1', { MY_VAR: 'test' });
+
+    // Create a snapshot (v2)
+    const createResult = await dokku.exec('create', 'snap-restore-v1');
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    // Simulate v1 by removing new files
+    const snapshotDir = `/var/lib/dokku/data/snapshot/snap-restore-v1/${snapshotId}`;
+    for (const file of ['ports.txt', 'ps-scale.txt', 'git.txt', 'checks.txt', 'resource.txt', 'builder.txt', 'buildpacks.txt', 'nginx.txt', 'scheduler.txt', 'registry.txt', 'cron.txt', 'app-json.txt']) {
+      try {
+        dokku.readFile(`${snapshotDir}/${file}`);
+        // File exists, remove it to simulate v1
+        const cmd = process.env.DOKKU_USE_SUDO === 'true' ? `sudo rm -f ${snapshotDir}/${file}` : `rm -f ${snapshotDir}/${file}`;
+        require('child_process').execSync(cmd);
+      } catch { /* file doesn't exist, that's fine */ }
+    }
+
+    // Clear config
+    dokku.runDokku('config:clear', '--no-restart', 'snap-restore-v1');
+
+    // Restore should succeed even without new files
+    const restoreResult = await dokku.exec('restore', 'snap-restore-v1', snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Config should still be restored
+    const config = dokku.getAppConfig('snap-restore-v1');
+    expect(config['MY_VAR']).toBe('test');
+  });
+
   it('imports service data on restore', async () => {
     dokku.createTestApp('snap-restore-pg');
     dokku.createPostgresService('snap-restore-pg-svc');

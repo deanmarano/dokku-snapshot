@@ -90,7 +90,7 @@ describe('snapshot:create', () => {
     );
     expect(metadata.app).toBe('snap-meta-test');
     expect(metadata.timestamp).toBe(snapshotId);
-    expect(metadata.snapshot_version).toBe('1');
+    expect(metadata.snapshot_version).toBe('2');
     expect(metadata.dokku_version).toBeTruthy();
   });
 
@@ -112,6 +112,96 @@ describe('snapshot:create', () => {
     const result = await dokku.exec('create', 'snap-nonexistent-app');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('does not exist');
+  });
+
+  it('captures port mappings', async () => {
+    dokku.createTestApp('snap-ports-test');
+    dokku.setPortMap('snap-ports-test', 'http:80:5000', 'https:443:5000');
+
+    const result = await dokku.exec('create', 'snap-ports-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    const ports = dokku.readFile(
+      `${PLUGIN_DATA_ROOT}/snap-ports-test/${snapshotId}/ports.txt`
+    );
+    expect(ports).toContain('80');
+    expect(ports).toContain('5000');
+  });
+
+  it('captures git settings', async () => {
+    dokku.createTestApp('snap-git-test');
+    dokku.setGitProperty('snap-git-test', 'deploy-branch', 'production');
+
+    const result = await dokku.exec('create', 'snap-git-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    const git = dokku.readFile(
+      `${PLUGIN_DATA_ROOT}/snap-git-test/${snapshotId}/git.txt`
+    );
+    expect(git).toContain('production');
+  });
+
+  it('captures v2 metadata', async () => {
+    dokku.createTestApp('snap-v2-test');
+
+    const result = await dokku.exec('create', 'snap-v2-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    const metadata = JSON.parse(
+      dokku.readFile(`${PLUGIN_DATA_ROOT}/snap-v2-test/${snapshotId}/metadata.json`)
+    );
+    expect(metadata.snapshot_version).toBe('2');
+  });
+
+  it('handles missing optional plugins gracefully', async () => {
+    dokku.createTestApp('snap-optional-test');
+
+    const result = await dokku.exec('create', 'snap-optional-test');
+    expect(result.exitCode).toBe(0);
+
+    // letsencrypt plugin likely not installed - should not cause error
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    expect(match).not.toBeNull();
+  });
+
+  it('captures nginx settings', async () => {
+    dokku.createTestApp('snap-nginx-test');
+    dokku.setNginxProperty('snap-nginx-test', 'client-max-body-size', '50m');
+
+    const result = await dokku.exec('create', 'snap-nginx-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    const nginx = dokku.readFile(
+      `${PLUGIN_DATA_ROOT}/snap-nginx-test/${snapshotId}/nginx.txt`
+    );
+    expect(nginx).toContain('50m');
+  });
+
+  it('captures scheduler settings', async () => {
+    dokku.createTestApp('snap-sched-test');
+
+    const result = await dokku.exec('create', 'snap-sched-test');
+    expect(result.exitCode).toBe(0);
+
+    const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
+
+    expect(dokku.pathExists(`${PLUGIN_DATA_ROOT}/snap-sched-test/${snapshotId}/scheduler.txt`)).toBe(true);
+    expect(dokku.pathExists(`${PLUGIN_DATA_ROOT}/snap-sched-test/${snapshotId}/registry.txt`)).toBe(true);
+    expect(dokku.pathExists(`${PLUGIN_DATA_ROOT}/snap-sched-test/${snapshotId}/cron.txt`)).toBe(true);
+    expect(dokku.pathExists(`${PLUGIN_DATA_ROOT}/snap-sched-test/${snapshotId}/app-json.txt`)).toBe(true);
   });
 
   it('detects and exports linked postgres service', async () => {

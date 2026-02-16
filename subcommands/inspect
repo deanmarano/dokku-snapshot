@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
+source "$PLUGIN_BASE_PATH/functions"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+APP="$1"
+
+if [[ -z "$APP" ]]; then
+  echo "Usage: dokku snapshot:inspect <app>" >&2
+  exit 1
+fi
+
+# Verify app exists
+if ! "$DOKKU_BIN" apps:exists "$APP" 2>/dev/null; then
+  echo "!     App $APP does not exist" >&2
+  exit 1
+fi
+
+# Print a section if the command produces output
+print_section() {
+  local header="$1"
+  shift
+  local output
+  output=$("$DOKKU_BIN" "$@" 2>/dev/null) || true
+  if [[ -n "$output" ]]; then
+    echo "-----> $header"
+    echo "$output"
+    echo ""
+  fi
+}
+
+echo "=====> Inspecting $APP"
+echo ""
+
+print_section "Config vars" config:export "$APP"
+print_section "Domains" domains:report "$APP"
+print_section "Ports" ports:list "$APP"
+print_section "Proxy" proxy:report "$APP"
+print_section "Nginx" nginx:report "$APP"
+print_section "Network" network:report "$APP"
+print_section "Docker options" docker-options:report "$APP"
+print_section "PS" ps:report "$APP"
+print_section "PS scaling" ps:scale "$APP"
+print_section "Storage" storage:report "$APP"
+print_section "Git" git:report "$APP"
+print_section "Checks" checks:report "$APP"
+print_section "Resource limits" resource:report "$APP"
+print_section "Builder" builder:report "$APP"
+print_section "Buildpacks" buildpacks:report "$APP"
+print_section "Scheduler" scheduler:report "$APP"
+print_section "Registry" registry:report "$APP"
+print_section "Cron" cron:report "$APP"
+print_section "App JSON" app-json:report "$APP"
+print_section "Letsencrypt" letsencrypt:report "$APP"
+print_section "Certs" certs:report "$APP"
+
+# Linked services
+echo "-----> Linked services"
+svc_list=$(detect_linked_services "$APP") || true
+if [[ -n "$svc_list" ]]; then
+  while read -r svc_type svc_name; do
+    [[ -z "$svc_type" || -z "$svc_name" ]] && continue
+    echo "       $svc_type: $svc_name"
+  done <<< "$svc_list"
+else
+  echo "       (none)"
+fi

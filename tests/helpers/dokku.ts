@@ -209,6 +209,125 @@ export class DokkuSnapshot {
     this.apps = [];
   }
 
+  /** Set port mappings on an app */
+  setPortMap(app: string, ...mappings: string[]): void {
+    this.runDokku('ports:set', app, ...mappings);
+  }
+
+  /** Get port mappings for an app */
+  getPortMap(app: string): string[] {
+    try {
+      const output = this.runDokku('ports:list', app);
+      const lines = output.trim().split('\n');
+      const ports: string[] = [];
+      for (const line of lines) {
+        // Skip header lines (Dokku output may have leading spaces and -----> prefixes)
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('----->') || trimmed.startsWith('scheme')) continue;
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          ports.push(`${parts[0]}:${parts[1]}:${parts[2]}`);
+        }
+      }
+      return ports;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Add a docker option for a phase */
+  setDockerOption(app: string, phase: string, option: string): void {
+    this.runDokku('docker-options:add', app, phase, option);
+  }
+
+  /** Get docker options report for an app */
+  getDockerOptions(app: string): string {
+    try {
+      return this.runDokku('docker-options:report', app);
+    } catch {
+      return '';
+    }
+  }
+
+  /** Set a git property on an app */
+  setGitProperty(app: string, key: string, value: string): void {
+    this.runDokku('git:set', app, key, value);
+  }
+
+  /** Get a git property from an app */
+  getGitProperty(app: string, key: string): string {
+    try {
+      const output = this.runDokku('git:report', app);
+      const fieldMap: Record<string, string> = {
+        'deploy-branch': 'Git deploy branch',
+        'keep-git-dir': 'Git keep git dir',
+      };
+      const field = fieldMap[key] || key;
+      const match = output.match(new RegExp(`${field}:\\s*(.*)`));
+      return match ? match[1].trim() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** Set ps scale for a process type */
+  setPsScale(app: string, proctype: string, count: number): void {
+    this.runDokku('ps:scale', app, `${proctype}=${count}`);
+  }
+
+  /** Set a resource limit on an app */
+  setResourceLimit(app: string, resource: string, value: string): void {
+    this.runDokku('resource:limit', app, `--${resource}`, value);
+  }
+
+  /** Set a network property on an app */
+  setNetworkProperty(app: string, key: string, value: string): void {
+    this.runDokku('network:set', app, key, value);
+  }
+
+  /** Enable or disable proxy for an app */
+  setProxyEnabled(app: string, enabled: boolean): void {
+    this.runDokku(enabled ? 'proxy:enable' : 'proxy:disable', app);
+  }
+
+  /** Set the builder for an app */
+  setBuilder(app: string, builder: string): void {
+    this.runDokku('builder:set', app, 'selected', builder);
+  }
+
+  /** Set a storage mount on an app */
+  setStorageMount(app: string, mount: string): void {
+    this.runDokku('storage:mount', app, mount);
+  }
+
+  /** Set an nginx property on an app */
+  setNginxProperty(app: string, key: string, value: string): void {
+    this.runDokku('nginx:set', app, key, value);
+  }
+
+  /** Get an nginx property from an app (app-level override only) */
+  getNginxProperty(app: string, key: string): string {
+    try {
+      const output = this.runDokku('nginx:report', app);
+      // Build field name: "client-max-body-size" -> "Nginx client max body size"
+      const fieldName = 'Nginx ' + key.replace(/-/g, ' ');
+      // Match app-level line (not computed/global)
+      for (const line of output.split('\n')) {
+        if (line.includes('computed') || line.includes('global')) continue;
+        const match = line.match(new RegExp(`${fieldName}:\\s*(.*)`));
+        if (match) return match[1].trim();
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** Set the scheduler for an app */
+  setScheduler(app: string, scheduler: string): void {
+    this.runDokku('scheduler:set', app, 'selected', scheduler);
+  }
+
   /** Read a file from the Dokku host */
   readFile(path: string): string {
     if (this.isRemote()) {
