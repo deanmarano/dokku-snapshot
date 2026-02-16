@@ -29,6 +29,18 @@ export class DokkuSnapshot {
     return USE_SUDO ? `sudo dokku ${argsStr}` : `dokku ${argsStr}`;
   }
 
+  /**
+   * Check if an error is just a harmless Dokku basher cache warning.
+   * After plugin installs, /home/dokku/.basher/bash can have a stale "main"
+   * reference that causes "main: command not found" on stderr with exit 127.
+   * The actual command still succeeds in this case.
+   */
+  private isBasherWarning(stderr: string, exitCode: number): boolean {
+    return (exitCode === 127 || exitCode === 1) &&
+      stderr.includes('main: command not found') &&
+      stderr.includes('.basher/bash');
+  }
+
   /** Execute a snapshot command and return exit code, stdout, stderr */
   async exec(...args: string[]): Promise<ExecResult> {
     const fullArgs = args[0]?.startsWith('snapshot:') ? args : ['snapshot:' + args[0], ...args.slice(1)];
@@ -38,11 +50,16 @@ export class DokkuSnapshot {
       const { stdout, stderr } = await execAsync(cmd);
       return { exitCode: 0, stdout, stderr };
     } catch (error: any) {
-      return {
-        exitCode: error.code || 1,
-        stdout: error.stdout || '',
-        stderr: error.stderr || error.message || '',
-      };
+      const exitCode = error.code || 1;
+      const stdout = error.stdout || '';
+      const stderr = error.stderr || error.message || '';
+
+      // Treat basher cache warnings as success if command produced output
+      if (this.isBasherWarning(stderr, exitCode) && stdout.length > 0) {
+        return { exitCode: 0, stdout, stderr };
+      }
+
+      return { exitCode, stdout, stderr };
     }
   }
 
@@ -50,13 +67,13 @@ export class DokkuSnapshot {
   run(...args: string[]): string {
     const fullArgs = args[0]?.startsWith('snapshot:') ? args : ['snapshot:' + args[0], ...args.slice(1)];
     const cmd = this.buildCommand(fullArgs);
-    return execSync(cmd, { encoding: 'utf-8' });
+    return this.execSyncTolerant(cmd);
   }
 
   /** Run a generic dokku command */
   runDokku(...args: string[]): string {
     const cmd = this.buildCommand(args);
-    return execSync(cmd, { encoding: 'utf-8' });
+    return this.execSyncTolerant(cmd);
   }
 
   /** Run a generic dokku command async, returning ExecResult */
@@ -66,11 +83,31 @@ export class DokkuSnapshot {
       const { stdout, stderr } = await execAsync(cmd);
       return { exitCode: 0, stdout, stderr };
     } catch (error: any) {
-      return {
-        exitCode: error.code || 1,
-        stdout: error.stdout || '',
-        stderr: error.stderr || error.message || '',
-      };
+      const exitCode = error.code || 1;
+      const stdout = error.stdout || '';
+      const stderr = error.stderr || error.message || '';
+
+      if (this.isBasherWarning(stderr, exitCode)) {
+        return { exitCode: 0, stdout, stderr };
+      }
+
+      return { exitCode, stdout, stderr };
+    }
+  }
+
+  /**
+   * execSync wrapper that tolerates the basher "main: command not found" warning.
+   * If the command fails only due to the basher cache issue, returns stdout.
+   */
+  private execSyncTolerant(cmd: string): string {
+    try {
+      return execSync(cmd, { encoding: 'utf-8' });
+    } catch (error: any) {
+      const stderr = error.stderr || error.message || '';
+      if (this.isBasherWarning(stderr, error.status || 1) && error.stdout) {
+        return error.stdout;
+      }
+      throw error;
     }
   }
 
