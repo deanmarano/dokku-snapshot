@@ -115,7 +115,7 @@ describe('snapshot:create', () => {
   });
 
   it('detects and exports linked postgres service', async () => {
-    if (!dokku.isPostgresAvailable()) {
+    if (!await dokku.isPostgresAvailable()) {
       console.log('Skipping: postgres plugin not functional');
       return;
     }

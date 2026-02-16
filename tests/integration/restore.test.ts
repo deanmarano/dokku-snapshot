@@ -93,7 +93,7 @@ describe('snapshot:restore', () => {
   });
 
   it('imports service data on restore', async () => {
-    if (!dokku.isPostgresAvailable()) {
+    if (!await dokku.isPostgresAvailable()) {
       console.log('Skipping: postgres plugin not functional');
       return;
     }

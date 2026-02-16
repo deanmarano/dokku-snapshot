@@ -167,13 +167,13 @@ export class DokkuSnapshot {
   }
 
   /** Check if postgres plugin commands are available and functional */
-  isPostgresAvailable(): boolean {
-    try {
-      this.runDokku('postgres:list');
-      return true;
-    } catch {
-      return false;
-    }
+  async isPostgresAvailable(): Promise<boolean> {
+    const result = await this.execDokku('postgres:list');
+    // postgres:list returns "There are no Postgres services" on stderr when empty
+    // but should exit 0 if functional. Check both exit code and absence of dispatch errors.
+    if (result.exitCode !== 0) return false;
+    if (result.stderr.includes('main: command not found')) return false;
+    return true;
   }
 
   /** Create a postgres service and track for cleanup */
