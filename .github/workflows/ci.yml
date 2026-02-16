@@ -45,9 +45,12 @@ jobs:
 
       - name: Install plugin
         run: |
-          sudo mkdir -p /var/lib/dokku/plugins/available/snapshot
-          sudo cp -r ./* /var/lib/dokku/plugins/available/snapshot/
-          sudo ln -sf /var/lib/dokku/plugins/available/snapshot /var/lib/dokku/plugins/enabled/snapshot
+          PLUGIN_DIR=/var/lib/dokku/plugins/available/snapshot
+          sudo mkdir -p "$PLUGIN_DIR/subcommands"
+          sudo cp plugin.toml config commands install functions "$PLUGIN_DIR/"
+          sudo cp subcommands/* "$PLUGIN_DIR/subcommands/"
+          sudo chmod +x "$PLUGIN_DIR/commands" "$PLUGIN_DIR/config" "$PLUGIN_DIR/install" "$PLUGIN_DIR/functions" "$PLUGIN_DIR/subcommands/"*
+          sudo ln -sf "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/snapshot
           sudo mkdir -p /var/lib/dokku/data/snapshot
           sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
           sudo dokku plugin:install-dependencies snapshot || true
