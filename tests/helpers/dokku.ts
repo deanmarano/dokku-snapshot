@@ -1,7 +1,4 @@
-import { execSync, exec, spawnSync } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { execSync, spawn, spawnSync } from 'child_process';
 
 const DOKKU_HOST = process.env.DOKKU_HOST || 'local';
 const DOKKU_SSH_PORT = process.env.DOKKU_SSH_PORT || '22';
@@ -44,26 +41,40 @@ export class DokkuSnapshot {
     );
   }
 
+  /**
+   * Run a command asynchronously with inherited stdin.
+   * Uses spawn with inherited stdin to avoid basher dispatch failures.
+   */
+  private spawnAsync(cmd: string): Promise<ExecResult> {
+    return new Promise((resolve) => {
+      const parts = cmd.split(/\s+/);
+      const child = spawn(parts[0], parts.slice(1), {
+        stdio: ['inherit', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+      child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+      child.on('close', (code) => {
+        const exitCode = code ?? 1;
+        if (exitCode === 0) {
+          resolve({ exitCode: 0, stdout, stderr });
+        } else if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
+          resolve({ exitCode: 0, stdout, stderr });
+        } else {
+          resolve({ exitCode, stdout, stderr });
+        }
+      });
+    });
+  }
+
   /** Execute a snapshot command and return exit code, stdout, stderr */
   async exec(...args: string[]): Promise<ExecResult> {
     const fullArgs = args[0]?.startsWith('snapshot:') ? args : ['snapshot:' + args[0], ...args.slice(1)];
     const cmd = this.buildCommand(fullArgs);
-
-    try {
-      const { stdout, stderr } = await execAsync(cmd);
-      return { exitCode: 0, stdout, stderr };
-    } catch (error: any) {
-      const exitCode = error.code || 1;
-      const stdout = error.stdout || '';
-      const stderr = error.stderr || error.message || '';
-
-      // Treat harmless warnings as success when command produced output
-      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
-        return { exitCode: 0, stdout, stderr };
-      }
-
-      return { exitCode, stdout, stderr };
-    }
+    return this.spawnAsync(cmd);
   }
 
   /** Run a dokku snapshot command synchronously */
@@ -82,20 +93,7 @@ export class DokkuSnapshot {
   /** Run a generic dokku command async, returning ExecResult */
   async execDokku(...args: string[]): Promise<ExecResult> {
     const cmd = this.buildCommand(args);
-    try {
-      const { stdout, stderr } = await execAsync(cmd);
-      return { exitCode: 0, stdout, stderr };
-    } catch (error: any) {
-      const exitCode = error.code || 1;
-      const stdout = error.stdout || '';
-      const stderr = error.stderr || error.message || '';
-
-      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
-        return { exitCode: 0, stdout, stderr };
-      }
-
-      return { exitCode, stdout, stderr };
-    }
+    return this.spawnAsync(cmd);
   }
 
   /**
