@@ -49,8 +49,11 @@ EOF
 "$DOKKU_BIN" docker-options:report "$APP" > "$SNAPSHOT_DIR/docker-options.txt" 2>/dev/null || true
 
 # Detect and export linked services
+echo "       DEBUG: DOKKU_BIN=$DOKKU_BIN"
 echo "       DEBUG: config:show output for $APP:"
-"$DOKKU_BIN" config:show "$APP" 2>/dev/null || echo "       DEBUG: config:show failed"
+"$DOKKU_BIN" config:show "$APP" || echo "       DEBUG: config:show failed with $?"
+echo "       DEBUG: config:export output:"
+"$DOKKU_BIN" config:export "$APP" || echo "       DEBUG: config:export failed"
 echo "       DEBUG: detect_linked_services output:"
 detect_linked_services "$APP" || echo "       DEBUG: detect_linked_services produced no output"
 echo "       DEBUG: end detect_linked_services"

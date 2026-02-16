@@ -119,6 +119,12 @@ describe('snapshot:create', () => {
     dokku.createPostgresService('snap-pg-svc');
     dokku.linkPostgres('snap-pg-svc', 'snap-pg-test');
 
+    // Debug: verify link worked
+    const configCheck = dokku.getAppConfig('snap-pg-test');
+    console.log('DEBUG config before create:', JSON.stringify(configCheck));
+    const linkCheck = await dokku.execDokku('postgres:linked', 'snap-pg-svc', 'snap-pg-test');
+    console.log('DEBUG postgres:linked result:', linkCheck);
+
     const result = await dokku.exec('create', 'snap-pg-test');
     console.log('DEBUG create stdout:', result.stdout);
     console.log('DEBUG create stderr:', result.stderr);
