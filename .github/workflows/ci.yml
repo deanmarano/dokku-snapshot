@@ -60,17 +60,6 @@ jobs:
           sudo dokku snapshot:help
           sudo dokku postgres:help
           sudo dokku apps:list
-          # Debug basher dispatch
-          echo "=== Basher structure ==="
-          sudo ls -la /home/dokku/.basher/ 2>/dev/null || true
-          sudo cat /home/dokku/.basher/bash 2>/dev/null || true
-          echo "=== Plugn/basher cellar ==="
-          sudo find /home/dokku/.basher/cellar -type f 2>/dev/null | head -50 || true
-          echo "=== Enabled plugins ==="
-          ls -la /var/lib/dokku/plugins/enabled/
-          echo "=== Test postgres:create with trace ==="
-          sudo DOKKU_TRACE=1 dokku postgres:create debug-test-svc 2>&1 || true
-          sudo dokku postgres:destroy debug-test-svc --force 2>/dev/null || true
 
       - name: Run integration tests
         run: npm run test:integration

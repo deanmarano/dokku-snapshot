@@ -33,7 +33,8 @@ export class DokkuSnapshot {
    * Check if an error is just a harmless Dokku basher/nginx warning.
    * After plugin installs, Dokku can emit "main: command not found"
    * or "Checking nginx status" warnings on stderr. These are harmless
-   * when the command's stdout indicates it actually ran.
+   * and should be tolerated even when the command produces no stdout
+   * (e.g. postgres:create may exit 127 from basher before producing output).
    */
   private isHarmlessWarning(stderr: string): boolean {
     const stderrLines = stderr.split('\n').filter(l => l.trim());
@@ -57,8 +58,8 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      // Treat harmless warnings as success when command produced output
-      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
+      // Treat harmless warnings as success
+      if (this.isHarmlessWarning(stderr)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -90,7 +91,7 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
+      if (this.isHarmlessWarning(stderr)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -108,7 +109,7 @@ export class DokkuSnapshot {
     } catch (error: any) {
       const stderr = error.stderr || error.message || '';
       const stdout = error.stdout || '';
-      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
+      if (this.isHarmlessWarning(stderr)) {
         return stdout;
       }
       throw error;
