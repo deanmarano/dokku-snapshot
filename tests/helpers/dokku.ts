@@ -1,4 +1,4 @@
-import { execSync, exec } from 'child_process';
+import { execSync, exec, spawnSync } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
@@ -33,8 +33,7 @@ export class DokkuSnapshot {
    * Check if an error is just a harmless Dokku basher/nginx warning.
    * After plugin installs, Dokku can emit "main: command not found"
    * or "Checking nginx status" warnings on stderr. These are harmless
-   * and should be tolerated even when the command produces no stdout
-   * (e.g. postgres:create may exit 127 from basher before producing output).
+   * when the command's stdout indicates it actually ran.
    */
   private isHarmlessWarning(stderr: string): boolean {
     const stderrLines = stderr.split('\n').filter(l => l.trim());
@@ -58,8 +57,8 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      // Treat harmless warnings as success
-      if (this.isHarmlessWarning(stderr)) {
+      // Treat harmless warnings as success when command produced output
+      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -91,7 +90,7 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      if (this.isHarmlessWarning(stderr)) {
+      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -100,20 +99,33 @@ export class DokkuSnapshot {
   }
 
   /**
-   * execSync wrapper that tolerates the basher "main: command not found" warning.
-   * If the command fails only due to the basher cache issue, returns stdout.
+   * Run a command synchronously with inherited stdin.
+   * Dokku plugin commands (e.g. postgres:create) fail with basher dispatch
+   * errors when stdin is piped (Node.js default). Inheriting stdin from the
+   * parent process avoids this issue.
    */
   private execSyncTolerant(cmd: string): string {
-    try {
-      return execSync(cmd, { encoding: 'utf-8' });
-    } catch (error: any) {
-      const stderr = error.stderr || error.message || '';
-      const stdout = error.stdout || '';
-      if (this.isHarmlessWarning(stderr)) {
-        return stdout;
-      }
-      throw error;
+    // Split command for spawnSync - first word is the command, rest are args
+    const parts = cmd.split(/\s+/);
+    const result = spawnSync(parts[0], parts.slice(1), {
+      encoding: 'utf-8',
+      stdio: ['inherit', 'pipe', 'pipe'],
+    });
+
+    if (result.status === 0) {
+      return result.stdout;
     }
+
+    const stderr = result.stderr || '';
+    if (this.isHarmlessWarning(stderr)) {
+      return result.stdout;
+    }
+
+    const error: any = new Error(`Command failed: ${cmd}\n${stderr}`);
+    error.status = result.status;
+    error.stdout = result.stdout;
+    error.stderr = stderr;
+    throw error;
   }
 
   /** Create a test app and track it for cleanup */

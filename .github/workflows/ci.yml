@@ -60,28 +60,6 @@ jobs:
           sudo dokku snapshot:help
           sudo dokku postgres:help
           sudo dokku apps:list
-          # Debug: test stdio modes from Node.js
-          echo "=== Testing spawnSync with stdio inherit ==="
-          node -e "
-            const { spawnSync } = require('child_process');
-            const r = spawnSync('sudo', ['dokku', 'postgres:create', 'inherit-test-svc'], { stdio: 'inherit' });
-            console.log('INHERIT EXIT:', r.status);
-          "
-          sudo dokku postgres:exists inherit-test-svc && echo "INHERIT SERVICE EXISTS" || echo "INHERIT SERVICE MISSING"
-          sudo dokku postgres:destroy inherit-test-svc --force 2>/dev/null || true
-          echo "=== Testing spawnSync with explicit stdin ==="
-          node -e "
-            const { spawnSync } = require('child_process');
-            const r = spawnSync('sudo', ['dokku', 'postgres:create', 'stdin-test-svc'], {
-              encoding: 'utf-8',
-              stdio: ['inherit', 'pipe', 'pipe']
-            });
-            console.log('STDIN EXIT:', r.status);
-            console.log('STDIN STDOUT:', JSON.stringify(r.stdout?.slice(0,200)));
-            console.log('STDIN STDERR:', JSON.stringify(r.stderr?.slice(0,200)));
-          "
-          sudo dokku postgres:exists stdin-test-svc && echo "STDIN SERVICE EXISTS" || echo "STDIN SERVICE MISSING"
-          sudo dokku postgres:destroy stdin-test-svc --force 2>/dev/null || true
 
       - name: Run integration tests
         run: npm run test:integration
