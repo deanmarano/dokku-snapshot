@@ -54,7 +54,7 @@ detect_linked_services "$APP" | while read -r svc_type svc_name; do
   echo "       Exporting $svc_type service: $svc_name"
   mkdir -p "$SNAPSHOT_DIR/services/$svc_type"
   export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
-done
+done || true
 
 echo "-----> Snapshot created: $TIMESTAMP"
 echo "       Location: $SNAPSHOT_DIR"

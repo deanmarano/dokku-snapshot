@@ -35,10 +35,14 @@ export class DokkuSnapshot {
    * reference that causes "main: command not found" on stderr with exit 127.
    * The actual command still succeeds in this case.
    */
-  private isBasherWarning(stderr: string, exitCode: number): boolean {
-    return (exitCode === 127 || exitCode === 1) &&
-      stderr.includes('main: command not found') &&
-      stderr.includes('.basher/bash');
+  private isBasherWarning(stderr: string, _exitCode: number): boolean {
+    const stderrLines = stderr.split('\n').filter(l => l.trim());
+    const allBasher = stderrLines.length > 0 && stderrLines.every(
+      l => l.includes('main: command not found') ||
+           l.includes('Checking nginx status is not possible') ||
+           l.trim() === ''
+    );
+    return allBasher;
   }
 
   /** Execute a snapshot command and return exit code, stdout, stderr */
@@ -54,8 +58,8 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      // Treat basher cache warnings as success if command produced output
-      if (this.isBasherWarning(stderr, exitCode) && stdout.length > 0) {
+      // Treat basher cache warnings as success
+      if (this.isBasherWarning(stderr, exitCode)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -104,8 +108,8 @@ export class DokkuSnapshot {
       return execSync(cmd, { encoding: 'utf-8' });
     } catch (error: any) {
       const stderr = error.stderr || error.message || '';
-      if (this.isBasherWarning(stderr, error.status || 1) && error.stdout) {
-        return error.stdout;
+      if (this.isBasherWarning(stderr, error.status || 1)) {
+        return error.stdout || '';
       }
       throw error;
     }

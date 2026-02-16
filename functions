@@ -17,7 +17,7 @@ detect_linked_services() {
     # Match DOKKU_<TYPE>_<COLOR>_NAME=<service-name>
     echo "$config_output" | grep -oP "^DOKKU_${upper_type}_[A-Z_]+_NAME:\s*\K.*" | while read -r name; do
       echo "$svc_type $name"
-    done
+    done || true
   done
 }
 
