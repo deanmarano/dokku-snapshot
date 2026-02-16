@@ -93,12 +93,16 @@ describe('snapshot:restore', () => {
   });
 
   it('imports service data on restore', async () => {
-    if (!await dokku.isPostgresAvailable()) {
-      console.log('Skipping: postgres plugin not functional');
-      return;
+    try {
+      dokku.createTestApp('snap-restore-pg');
+      dokku.createPostgresService('snap-restore-pg-svc');
+    } catch (e: any) {
+      if (e.message?.includes('main: command not found')) {
+        console.log('Skipping: postgres plugin dispatch broken (basher cache issue)');
+        return;
+      }
+      throw e;
     }
-    dokku.createTestApp('snap-restore-pg');
-    dokku.createPostgresService('snap-restore-pg-svc');
     dokku.linkPostgres('snap-restore-pg-svc', 'snap-restore-pg');
 
     // Create snapshot (includes postgres export)
