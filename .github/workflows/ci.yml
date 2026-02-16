@@ -60,6 +60,26 @@ jobs:
           sudo dokku snapshot:help
           sudo dokku postgres:help
           sudo dokku apps:list
+          # Test postgres:create from bash (no trace, no redirects)
+          echo "=== Testing postgres:create from bash ==="
+          sudo dokku postgres:create bash-test-svc || echo "BASH EXIT CODE: $?"
+          sudo dokku postgres:exists bash-test-svc && echo "SERVICE EXISTS" || echo "SERVICE MISSING"
+          sudo dokku postgres:destroy bash-test-svc --force 2>/dev/null || true
+          # Test postgres:create from Node.js (same as tests)
+          echo "=== Testing postgres:create from Node.js ==="
+          node -e "
+            const { execSync } = require('child_process');
+            try {
+              const r = execSync('sudo dokku postgres:create node-test-svc', { encoding: 'utf-8' });
+              console.log('SUCCESS stdout:', JSON.stringify(r));
+            } catch (e) {
+              console.log('FAILED exit:', e.status);
+              console.log('FAILED stdout:', JSON.stringify(e.stdout));
+              console.log('FAILED stderr:', JSON.stringify(e.stderr));
+            }
+          "
+          sudo dokku postgres:exists node-test-svc && echo "NODE SERVICE EXISTS" || echo "NODE SERVICE MISSING"
+          sudo dokku postgres:destroy node-test-svc --force 2>/dev/null || true
 
       - name: Run integration tests
         run: npm run test:integration
