@@ -57,8 +57,10 @@ jobs:
           sudo ln -sf "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/snapshot
           sudo mkdir -p /var/lib/dokku/data/snapshot
           sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
-          # Rebuild basher command dispatch cache for all plugins
-          sudo dokku plugin:install-dependencies || true
+          # Note: do NOT run plugin:install or plugin:install-dependencies here.
+          # The snapshot plugin uses direct command dispatch (not basher), and
+          # running plugin:install would create broken basher entries that break
+          # postgres:create dispatch.
           # Verify commands work
           sudo dokku snapshot:help
           sudo dokku postgres:help
