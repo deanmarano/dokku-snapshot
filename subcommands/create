@@ -49,14 +49,14 @@ EOF
 "$DOKKU_BIN" docker-options:report "$APP" > "$SNAPSHOT_DIR/docker-options.txt" 2>/dev/null || true
 
 # Detect and export linked services
-echo "       DEBUG: DOKKU_BIN=$DOKKU_BIN"
-echo "       DEBUG: config:show output for $APP:"
-"$DOKKU_BIN" config:show "$APP" || echo "       DEBUG: config:show failed with $?"
-echo "       DEBUG: config:export output:"
-"$DOKKU_BIN" config:export "$APP" || echo "       DEBUG: config:export failed"
-echo "       DEBUG: detect_linked_services output:"
-detect_linked_services "$APP" || echo "       DEBUG: detect_linked_services produced no output"
-echo "       DEBUG: end detect_linked_services"
+echo "       DEBUG: DOKKU_BIN=$DOKKU_BIN whoami=$(whoami) HOME=$HOME"
+echo "       DEBUG: ls /home/dokku/$APP/:"
+ls -la "/home/dokku/$APP/" 2>&1 || true
+echo "       DEBUG: cat /home/dokku/$APP/ENV:"
+cat "/home/dokku/$APP/ENV" 2>&1 || true
+echo "       DEBUG: config:show output:"
+"$DOKKU_BIN" config:show "$APP" 2>&1 || true
+echo "       DEBUG: end config:show"
 
 # Use fd 3 for the loop input so that commands inside the loop keep their
 # original stdin.  Dokku plugin commands (basher dispatch) fail when stdin
