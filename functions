@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 
-# Detect linked services by parsing config vars.
-# Dokku service plugins set vars like DOKKU_POSTGRES_<COLOR>_NAME=<service-name> on link.
+# Detect linked services by listing all services and checking linkage.
 # Outputs lines of: <type> <service-name>
 detect_linked_services() {
   local APP="$1"
-  local config_output
-
-  config_output=$("$DOKKU_BIN" config:show "$APP" 2>/dev/null) || return 0
-
   local SERVICE_TYPES=("postgres" "redis" "mysql" "mongo" "mariadb")
 
   for svc_type in "${SERVICE_TYPES[@]}"; do
-    local upper_type
-    upper_type=$(echo "$svc_type" | tr '[:lower:]' '[:upper:]')
-    # Match DOKKU_<TYPE>_<COLOR>_NAME=<service-name>
-    echo "$config_output" | grep -oP "^DOKKU_${upper_type}_[A-Z_]+_NAME:\s*\K.*" | while read -r name; do
-      echo "$svc_type $name"
-    done || true
+    # Check if the plugin is installed
+    if ! "$DOKKU_BIN" "$svc_type:list" &>/dev/null; then
+      continue
+    fi
+
+    # Capture service list into a variable to avoid piping into while-read,
+    # which would steal stdin from commands inside the loop (breaks basher).
+    local svc_list
+    svc_list=$("$DOKKU_BIN" "$svc_type:list" 2>/dev/null | tail -n +2) || true
+
+    while read -r name _rest; do
+      [[ -z "$name" ]] && continue
+      if "$DOKKU_BIN" "$svc_type:linked" "$name" "$APP" &>/dev/null; then
+        echo "$svc_type $name"
+      fi
+    done <<< "$svc_list"
   done
 }
 

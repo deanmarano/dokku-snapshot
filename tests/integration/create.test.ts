@@ -119,23 +119,13 @@ describe('snapshot:create', () => {
     dokku.createPostgresService('snap-pg-svc');
     dokku.linkPostgres('snap-pg-svc', 'snap-pg-test');
 
-    // Debug: verify link worked
-    const configCheck = dokku.getAppConfig('snap-pg-test');
-    console.log('DEBUG config before create:', JSON.stringify(configCheck));
-    const linkCheck = await dokku.execDokku('postgres:linked', 'snap-pg-svc', 'snap-pg-test');
-    console.log('DEBUG postgres:linked result:', linkCheck);
-
     const result = await dokku.exec('create', 'snap-pg-test');
-    console.log('DEBUG create stdout:', result.stdout);
-    console.log('DEBUG create stderr:', result.stderr);
     expect(result.exitCode).toBe(0);
 
     const match = result.stdout.match(/Snapshot created:\s*(\S+)/);
     const snapshotId = match![1];
 
     const dumpPath = `${PLUGIN_DATA_ROOT}/snap-pg-test/${snapshotId}/services/postgres/snap-pg-svc.dump`;
-    const serviceFiles = dokku.listFiles(`${PLUGIN_DATA_ROOT}/snap-pg-test/${snapshotId}/services`);
-    console.log('DEBUG services dir contents:', serviceFiles);
     expect(dokku.pathExists(dumpPath)).toBe(true);
   });
 });
