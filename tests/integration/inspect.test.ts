@@ -3,49 +3,45 @@ import { DokkuSnapshot } from '../helpers/dokku';
 
 describe('snapshot:inspect', () => {
   let dokku: DokkuSnapshot;
+  const APP = 'snap-inspect-full';
+  const PG_SVC = 'snap-inspect-pg';
+  let inspectOutput: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     dokku = new DokkuSnapshot();
+
+    // Create one app with config, domains, nginx, and postgres
+    dokku.createTestApp(APP);
+    dokku.setAppConfig(APP, { MY_VAR: 'hello' });
+    dokku.runDokku('domains:add', APP, 'example.com');
+    dokku.setNginxProperty(APP, 'client-max-body-size', '25m');
+    dokku.createPostgresService(PG_SVC);
+    dokku.linkPostgres(PG_SVC, APP);
+
+    // Run inspect once
+    const result = await dokku.exec('inspect', APP);
+    expect(result.exitCode).toBe(0);
+    inspectOutput = result.stdout;
   });
 
   afterAll(async () => {
     await dokku.cleanup();
   });
 
-  it('shows all config for an app', async () => {
-    dokku.createTestApp('snap-inspect-test');
-    dokku.setAppConfig('snap-inspect-test', { MY_VAR: 'hello' });
-    dokku.runDokku('domains:add', 'snap-inspect-test', 'example.com');
-
-    const result = await dokku.exec('inspect', 'snap-inspect-test');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Inspecting snap-inspect-test');
-    expect(result.stdout).toContain('Config vars');
-    expect(result.stdout).toContain('MY_VAR');
-    expect(result.stdout).toContain('Domains');
-    expect(result.stdout).toContain('example.com');
-    expect(result.stdout).toContain('Linked services');
+  it('shows app config, domains, and nginx settings', () => {
+    expect(inspectOutput).toContain('Inspecting snap-inspect-full');
+    expect(inspectOutput).toContain('Config vars');
+    expect(inspectOutput).toContain('MY_VAR');
+    expect(inspectOutput).toContain('Domains');
+    expect(inspectOutput).toContain('example.com');
+    expect(inspectOutput).toContain('Nginx');
+    expect(inspectOutput).toContain('25m');
   });
 
-  it('shows nginx overrides', async () => {
-    dokku.createTestApp('snap-inspect-nginx');
-    dokku.setNginxProperty('snap-inspect-nginx', 'client-max-body-size', '25m');
-
-    const result = await dokku.exec('inspect', 'snap-inspect-nginx');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Nginx');
-    expect(result.stdout).toContain('25m');
-  });
-
-  it('shows service version in inspect', async () => {
-    dokku.createTestApp('snap-inspect-svc');
-    dokku.createPostgresService('snap-inspect-pg');
-    dokku.linkPostgres('snap-inspect-pg', 'snap-inspect-svc');
-
-    const result = await dokku.exec('inspect', 'snap-inspect-svc');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('postgres: snap-inspect-pg');
-    expect(result.stdout).toContain('Version:');
+  it('shows linked service with version and status', () => {
+    expect(inspectOutput).toContain('Linked services');
+    expect(inspectOutput).toContain(`postgres: ${PG_SVC}`);
+    expect(inspectOutput).toContain('Version:');
   });
 
   it('fails for non-existent app', async () => {
