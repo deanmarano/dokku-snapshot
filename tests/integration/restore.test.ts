@@ -12,19 +12,14 @@ describe('snapshot:restore', () => {
     await dokku.cleanup();
   });
 
-  it('restores all app configuration settings', async () => {
-    const APP = 'snap-restore-all';
+  it('restores config, domains, ports, and nginx settings', async () => {
+    const APP = 'snap-restore-basic';
     dokku.createTestApp(APP);
 
-    // Set up all config types
     dokku.setAppConfig(APP, { MY_VAR: 'hello', OTHER_VAR: 'world' });
     dokku.runDokku('domains:add', APP, 'mysite.com');
     dokku.runDokku('domains:add', APP, 'api.mysite.com');
     dokku.setPortMap(APP, 'http:80:5000', 'https:443:5000');
-    dokku.setDockerOption(APP, 'deploy', '--restart=always');
-    dokku.setGitProperty(APP, 'deploy-branch', 'production');
-    dokku.setProxyEnabled(APP, false);
-    dokku.setBuilder(APP, 'dockerfile');
     dokku.setNginxProperty(APP, 'client-max-body-size', '50m');
 
     // Create snapshot
@@ -33,17 +28,13 @@ describe('snapshot:restore', () => {
     const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
     const snapshotId = match![1];
 
-    // Clear everything
+    // Clear settings
     dokku.runDokku('config:clear', '--no-restart', APP);
     dokku.runDokku('domains:clear', APP);
     dokku.runDokku('ports:clear', APP);
-    try { dokku.runDokku('docker-options:remove', APP, 'deploy', '--restart=always'); } catch { /* may not exist */ }
-    dokku.setGitProperty(APP, 'deploy-branch', '');
-    dokku.setProxyEnabled(APP, true);
-    dokku.runDokku('builder:set', APP, 'selected', '');
     dokku.runDokku('nginx:set', APP, 'client-max-body-size');
 
-    // Verify some settings are cleared
+    // Verify cleared
     expect(dokku.getAppConfig(APP)['MY_VAR']).toBeUndefined();
     expect(dokku.getAppDomains(APP)).not.toContain('mysite.com');
     expect(dokku.getNginxProperty(APP, 'client-max-body-size')).toBe('');
@@ -52,7 +43,7 @@ describe('snapshot:restore', () => {
     const restoreResult = await dokku.exec('restore', APP, snapshotId, '--force');
     expect(restoreResult.exitCode).toBe(0);
 
-    // Verify everything restored
+    // Verify restored
     const config = dokku.getAppConfig(APP);
     expect(config['MY_VAR']).toBe('hello');
     expect(config['OTHER_VAR']).toBe('world');
@@ -65,20 +56,39 @@ describe('snapshot:restore', () => {
     expect(ports).toContain('http:80:5000');
     expect(ports).toContain('https:443:5000');
 
-    const dockerOpts = dokku.getDockerOptions(APP);
-    expect(dockerOpts).toContain('--restart=always');
+    expect(dokku.getNginxProperty(APP, 'client-max-body-size')).toBe('50m');
+  });
 
-    const branch = dokku.getGitProperty(APP, 'deploy-branch');
-    expect(branch).toBe('production');
+  it('restores docker options, git, proxy, and builder settings', async () => {
+    const APP = 'snap-restore-adv';
+    dokku.createTestApp(APP);
 
-    const proxyReport = dokku.runDokku('proxy:report', APP);
-    expect(proxyReport).toContain('false');
+    dokku.setDockerOption(APP, 'deploy', '--restart=always');
+    dokku.setGitProperty(APP, 'deploy-branch', 'production');
+    dokku.setProxyEnabled(APP, false);
+    dokku.setBuilder(APP, 'dockerfile');
 
-    const builderReport = dokku.runDokku('builder:report', APP);
-    expect(builderReport).toContain('dockerfile');
+    // Create snapshot
+    const createResult = await dokku.exec('create', APP);
+    expect(createResult.exitCode).toBe(0);
+    const match = createResult.stdout.match(/Snapshot created:\s*(\S+)/);
+    const snapshotId = match![1];
 
-    const nginxVal = dokku.getNginxProperty(APP, 'client-max-body-size');
-    expect(nginxVal).toBe('50m');
+    // Clear settings
+    try { dokku.runDokku('docker-options:remove', APP, 'deploy', '--restart=always'); } catch { /* may not exist */ }
+    dokku.setGitProperty(APP, 'deploy-branch', '');
+    dokku.setProxyEnabled(APP, true);
+    dokku.runDokku('builder:set', APP, 'selected', '');
+
+    // Restore
+    const restoreResult = await dokku.exec('restore', APP, snapshotId, '--force');
+    expect(restoreResult.exitCode).toBe(0);
+
+    // Verify restored
+    expect(dokku.getDockerOptions(APP)).toContain('--restart=always');
+    expect(dokku.getGitProperty(APP, 'deploy-branch')).toBe('production');
+    expect(dokku.runDokku('proxy:report', APP)).toContain('false');
+    expect(dokku.runDokku('builder:report', APP)).toContain('dockerfile');
   });
 
   it('restores service data with version info', async () => {
