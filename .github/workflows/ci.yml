@@ -57,8 +57,8 @@ jobs:
           sudo ln -sf "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/snapshot
           sudo mkdir -p /var/lib/dokku/data/snapshot
           sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
-          # Trigger full plugin install to rebuild command dispatch
-          sudo dokku plugin:install || true
+          # Rebuild basher command dispatch cache for all plugins
+          sudo dokku plugin:install-dependencies || true
           # Verify commands work
           sudo dokku snapshot:help
           sudo dokku postgres:help

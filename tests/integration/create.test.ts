@@ -115,17 +115,8 @@ describe('snapshot:create', () => {
   });
 
   it('detects and exports linked postgres service', async () => {
-    try {
-      dokku.createTestApp('snap-pg-test');
-      dokku.createPostgresService('snap-pg-svc');
-    } catch (e: any) {
-      const errMsg = (e.message || '') + (e.stderr || '');
-      if (errMsg.includes('main: command not found')) {
-        console.log('Skipping: postgres plugin dispatch broken (basher cache issue)');
-        return;
-      }
-      throw e;
-    }
+    dokku.createTestApp('snap-pg-test');
+    dokku.createPostgresService('snap-pg-svc');
     dokku.linkPostgres('snap-pg-svc', 'snap-pg-test');
 
     const result = await dokku.exec('create', 'snap-pg-test');
