@@ -60,31 +60,35 @@ jobs:
           sudo dokku snapshot:help
           sudo dokku postgres:help
           sudo dokku apps:list
-          # Debug: Node.js execSync uses /bin/sh which is dash on Ubuntu.
-          # Test if specifying bash as shell fixes the basher issue.
-          echo "=== Testing postgres:create from Node.js (default shell) ==="
+          # Debug: compare Node.js subprocess vs direct bash
+          echo "=== Node.js env vs bash env ==="
+          echo "BASH HOME=$HOME"
+          node -e "console.log('NODE HOME=' + process.env.HOME)"
+          echo "=== Testing spawnSync (no shell wrapper) ==="
+          node -e "
+            const { spawnSync } = require('child_process');
+            const r = spawnSync('sudo', ['dokku', 'postgres:create', 'spawn-test-svc'], { encoding: 'utf-8' });
+            console.log('EXIT:', r.status);
+            console.log('STDOUT:', JSON.stringify(r.stdout.slice(0,200)));
+            console.log('STDERR:', JSON.stringify(r.stderr.slice(0,200)));
+          "
+          sudo dokku postgres:exists spawn-test-svc && echo "SPAWN SERVICE EXISTS" || echo "SPAWN SERVICE MISSING"
+          sudo dokku postgres:destroy spawn-test-svc --force 2>/dev/null || true
+          echo "=== Testing execSync with clean env ==="
           node -e "
             const { execSync } = require('child_process');
             try {
-              const r = execSync('sudo dokku postgres:create node-test-svc', { encoding: 'utf-8' });
-              console.log('SUCCESS');
+              const r = execSync('sudo dokku postgres:create clean-test-svc', {
+                encoding: 'utf-8',
+                env: { PATH: process.env.PATH, HOME: '/root' }
+              });
+              console.log('CLEAN ENV SUCCESS');
             } catch (e) {
-              console.log('DEFAULT SHELL FAILED exit:', e.status, 'stderr:', JSON.stringify(e.stderr));
+              console.log('CLEAN ENV FAILED exit:', e.status, 'stderr:', JSON.stringify(e.stderr?.slice(0,200)));
             }
           "
-          sudo dokku postgres:destroy node-test-svc --force 2>/dev/null || true
-          echo "=== Testing postgres:create from Node.js (bash shell) ==="
-          node -e "
-            const { execSync } = require('child_process');
-            try {
-              const r = execSync('sudo dokku postgres:create node-test-svc2', { encoding: 'utf-8', shell: '/bin/bash' });
-              console.log('SUCCESS');
-            } catch (e) {
-              console.log('BASH SHELL FAILED exit:', e.status, 'stderr:', JSON.stringify(e.stderr));
-            }
-          "
-          sudo dokku postgres:exists node-test-svc2 && echo "BASH SHELL SERVICE EXISTS" || echo "BASH SHELL SERVICE MISSING"
-          sudo dokku postgres:destroy node-test-svc2 --force 2>/dev/null || true
+          sudo dokku postgres:exists clean-test-svc && echo "CLEAN SERVICE EXISTS" || echo "CLEAN SERVICE MISSING"
+          sudo dokku postgres:destroy clean-test-svc --force 2>/dev/null || true
 
       - name: Run integration tests
         run: npm run test:integration
