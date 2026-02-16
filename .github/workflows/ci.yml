@@ -43,25 +43,20 @@ jobs:
           sudo usermod -aG docker $USER
           echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/dokku" | sudo tee /etc/sudoers.d/dokku-runner
 
+      - name: Install snapshot plugin
+        run: |
+          # Install via Dokku's plugin:install using file:// URL so basher/plugn
+          # dispatch is properly registered (manual file copy breaks basher dispatch)
+          sudo dokku plugin:install "file://$GITHUB_WORKSPACE" snapshot || true
+          sudo mkdir -p /var/lib/dokku/data/snapshot
+          sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
+
       - name: Install dokku-postgres
         run: |
           sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres || true
 
-      - name: Install snapshot plugin
+      - name: Verify plugins
         run: |
-          PLUGIN_DIR=/var/lib/dokku/plugins/available/snapshot
-          sudo mkdir -p "$PLUGIN_DIR/subcommands"
-          sudo cp plugin.toml config commands install functions "$PLUGIN_DIR/"
-          sudo cp subcommands/* "$PLUGIN_DIR/subcommands/"
-          sudo chmod +x "$PLUGIN_DIR/commands" "$PLUGIN_DIR/config" "$PLUGIN_DIR/install" "$PLUGIN_DIR/functions" "$PLUGIN_DIR/subcommands/"*
-          sudo ln -sf "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/snapshot
-          sudo mkdir -p /var/lib/dokku/data/snapshot
-          sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
-          # Note: do NOT run plugin:install or plugin:install-dependencies here.
-          # The snapshot plugin uses direct command dispatch (not basher), and
-          # running plugin:install would create broken basher entries that break
-          # postgres:create dispatch.
-          # Verify commands work
           sudo dokku snapshot:help
           sudo dokku postgres:help
           sudo dokku apps:list
