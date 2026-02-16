@@ -43,7 +43,11 @@ jobs:
           sudo usermod -aG docker $USER
           echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/dokku" | sudo tee /etc/sudoers.d/dokku-runner
 
-      - name: Install plugin
+      - name: Install dokku-postgres
+        run: |
+          sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres || true
+
+      - name: Install snapshot plugin
         run: |
           PLUGIN_DIR=/var/lib/dokku/plugins/available/snapshot
           sudo mkdir -p "$PLUGIN_DIR/subcommands"
@@ -53,21 +57,11 @@ jobs:
           sudo ln -sf "$PLUGIN_DIR" /var/lib/dokku/plugins/enabled/snapshot
           sudo mkdir -p /var/lib/dokku/data/snapshot
           sudo chown -R dokku:dokku /var/lib/dokku/data/snapshot
-          sudo dokku plugin:install-dependencies snapshot || true
+          # Trigger full plugin install to rebuild command dispatch
+          sudo dokku plugin:install || true
+          # Verify commands work
           sudo dokku snapshot:help
-
-      - name: Install dokku-postgres
-        run: |
-          sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres || true
           sudo dokku postgres:help
-
-      - name: Rebuild plugin cache
-        run: |
-          # Clear stale basher cache that causes "main: command not found"
-          sudo rm -f /home/dokku/.basher/bash
-          sudo dokku plugin:install-dependencies || true
-          # Verify commands work cleanly
-          sudo dokku version
           sudo dokku apps:list
 
       - name: Run integration tests

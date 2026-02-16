@@ -30,19 +30,18 @@ export class DokkuSnapshot {
   }
 
   /**
-   * Check if an error is just a harmless Dokku basher cache warning.
-   * After plugin installs, /home/dokku/.basher/bash can have a stale "main"
-   * reference that causes "main: command not found" on stderr with exit 127.
-   * The actual command still succeeds in this case.
+   * Check if an error is just a harmless Dokku basher/nginx warning.
+   * After plugin installs, Dokku can emit "main: command not found"
+   * or "Checking nginx status" warnings on stderr. These are harmless
+   * when the command's stdout indicates it actually ran.
    */
-  private isBasherWarning(stderr: string, _exitCode: number): boolean {
+  private isHarmlessWarning(stderr: string): boolean {
     const stderrLines = stderr.split('\n').filter(l => l.trim());
-    const allBasher = stderrLines.length > 0 && stderrLines.every(
+    return stderrLines.length > 0 && stderrLines.every(
       l => l.includes('main: command not found') ||
            l.includes('Checking nginx status is not possible') ||
            l.trim() === ''
     );
-    return allBasher;
   }
 
   /** Execute a snapshot command and return exit code, stdout, stderr */
@@ -58,8 +57,8 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      // Treat basher cache warnings as success
-      if (this.isBasherWarning(stderr, exitCode)) {
+      // Treat harmless warnings as success when command produced output
+      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -91,7 +90,7 @@ export class DokkuSnapshot {
       const stdout = error.stdout || '';
       const stderr = error.stderr || error.message || '';
 
-      if (this.isBasherWarning(stderr, exitCode)) {
+      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
         return { exitCode: 0, stdout, stderr };
       }
 
@@ -108,8 +107,9 @@ export class DokkuSnapshot {
       return execSync(cmd, { encoding: 'utf-8' });
     } catch (error: any) {
       const stderr = error.stderr || error.message || '';
-      if (this.isBasherWarning(stderr, error.status || 1)) {
-        return error.stdout || '';
+      const stdout = error.stdout || '';
+      if (stdout.length > 0 && this.isHarmlessWarning(stderr)) {
+        return stdout;
       }
       throw error;
     }
