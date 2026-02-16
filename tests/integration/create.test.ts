@@ -119,7 +119,8 @@ describe('snapshot:create', () => {
       dokku.createTestApp('snap-pg-test');
       dokku.createPostgresService('snap-pg-svc');
     } catch (e: any) {
-      if (e.message?.includes('main: command not found')) {
+      const errMsg = (e.message || '') + (e.stderr || '');
+      if (errMsg.includes('main: command not found')) {
         console.log('Skipping: postgres plugin dispatch broken (basher cache issue)');
         return;
       }
