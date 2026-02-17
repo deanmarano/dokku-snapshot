@@ -1,5 +1,34 @@
 #!/usr/bin/env bash
 
+# Get unique host paths from storage mounts.
+# Outputs one host path per line.
+get_storage_host_paths() {
+  local APP="$1"
+  local mount_list
+  mount_list=$("$DOKKU_BIN" storage:list "$APP" 2>/dev/null) || true
+
+  local seen=()
+  while IFS= read -r line; do
+    # Skip header/empty lines
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+    [[ "$line" =~ -----\> ]] && continue
+    line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [[ -z "$line" ]] && continue
+    # Format: /host/path:/container/path
+    local host_path="${line%%:*}"
+    [[ -z "$host_path" ]] && continue
+    # Deduplicate
+    local already=false
+    for existing in "${seen[@]:-}"; do
+      [[ "$existing" == "$host_path" ]] && already=true && break
+    done
+    if [[ "$already" == "false" ]]; then
+      seen+=("$host_path")
+      echo "$host_path"
+    fi
+  done <<< "$mount_list"
+}
+
 # Detect linked services by listing all services and checking linkage.
 # Outputs lines of: <type> <service-name>
 detect_linked_services() {

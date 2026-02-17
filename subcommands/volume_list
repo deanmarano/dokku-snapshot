@@ -3,6 +3,7 @@ set -eo pipefail
 [[ $DOKKU_TRACE ]] && set -x
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
+source "$PLUGIN_BASE_PATH/functions"
 
 [[ "${1:-}" == snapshot:* ]] && shift
 
@@ -20,27 +21,8 @@ if ! "$DOKKU_BIN" apps:exists "$APP" 2>/dev/null; then
 fi
 
 EXCLUDED_FILE="$PLUGIN_DATA_ROOT/$APP/.excluded-volumes"
-storage_report=$("$DOKKU_BIN" storage:report "$APP" 2>/dev/null) || true
 
-# Collect all unique host paths
-all_mounts=()
-for phase in "Storage build mounts" "Storage deploy mounts" "Storage run mounts"; do
-  mounts_val=$(echo "$storage_report" | grep -oP "${phase}:\s*\K.*" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-  if [[ -n "$mounts_val" ]]; then
-    IFS=',' read -ra mount_pairs <<< "$mounts_val"
-    for pair in "${mount_pairs[@]}"; do
-      pair=$(echo "$pair" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [[ -z "$pair" ]] && continue
-      host_path="${pair%%:*}"
-      [[ -z "$host_path" ]] && continue
-      already=false
-      for existing in "${all_mounts[@]:-}"; do
-        [[ "$existing" == "$host_path" ]] && already=true && break
-      done
-      [[ "$already" == "false" ]] && all_mounts+=("$host_path")
-    done
-  fi
-done
+mapfile -t all_mounts < <(get_storage_host_paths "$APP")
 
 echo "-----> Volumes for $APP"
 if [[ ${#all_mounts[@]} -eq 0 ]]; then

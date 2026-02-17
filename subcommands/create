@@ -47,30 +47,10 @@ while read -r svc_type svc_name <&3; do
 done 3< <(detect_linked_services "$APP") || true
 
 # Backup storage volumes
-storage_report=$("$DOKKU_BIN" storage:report "$APP" 2>/dev/null) || true
 EXCLUDED_FILE="$PLUGIN_DATA_ROOT/$APP/.excluded-volumes"
 
-# Collect all mount host paths from storage report
-all_mounts=()
-for phase in "Storage build mounts" "Storage deploy mounts" "Storage run mounts"; do
-  mounts_val=$(echo "$storage_report" | grep -oP "${phase}:\s*\K.*" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
-  if [[ -n "$mounts_val" ]]; then
-    IFS=',' read -ra mount_pairs <<< "$mounts_val"
-    for pair in "${mount_pairs[@]}"; do
-      pair=$(echo "$pair" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [[ -z "$pair" ]] && continue
-      # Extract host path (before the colon)
-      host_path="${pair%%:*}"
-      [[ -z "$host_path" ]] && continue
-      # Deduplicate
-      already=false
-      for existing in "${all_mounts[@]:-}"; do
-        [[ "$existing" == "$host_path" ]] && already=true && break
-      done
-      [[ "$already" == "false" ]] && all_mounts+=("$host_path")
-    done
-  fi
-done
+# Collect all mount host paths
+mapfile -t all_mounts < <(get_storage_host_paths "$APP")
 
 if [[ ${#all_mounts[@]} -gt 0 ]]; then
   mkdir -p "$SNAPSHOT_DIR/volumes"

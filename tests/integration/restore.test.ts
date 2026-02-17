@@ -29,7 +29,7 @@ describe('snapshot:restore', () => {
     const restoreResult = await dokku.exec('restore', APP, snapshotId, '--force');
     expect(restoreResult.exitCode).toBe(0);
     expect(restoreResult.stdout).toContain('Snapshot version:');
-    expect(restoreResult.stdout).toContain('Importing postgres service');
+    expect(restoreResult.stdout).toContain('Restoring postgres service');
   });
 
   it('requires --force flag', async () => {

@@ -1,26 +1,29 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DokkuSnapshot } from '../helpers/dokku';
-import { writeFileSync, mkdirSync, rmSync, readFileSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from 'fs';
+import { mkdtempSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 const PLUGIN_DATA_ROOT = '/var/lib/dokku/data/snapshot';
 
 describe('snapshot:volume', () => {
   let dokku: DokkuSnapshot;
   const APP = 'snap-vol-test';
-  const STORAGE_SUBDIR = `${APP}-uploads`;
-  const STORAGE_DIR = `/var/lib/dokku/data/storage/${STORAGE_SUBDIR}`;
+  let STORAGE_DIR: string;
 
   beforeAll(() => {
     dokku = new DokkuSnapshot();
     dokku.createTestApp(APP);
 
-    // Use dokku's own command to create the storage directory (handles permissions)
-    dokku.runDokku('storage:ensure-directory', STORAGE_SUBDIR);
+    // Use a temp directory we can write to as the storage mount
+    STORAGE_DIR = mkdtempSync(join(tmpdir(), 'snap-vol-test-'));
     dokku.setStorageMount(APP, `${STORAGE_DIR}:/app/uploads`);
   });
 
   afterAll(async () => {
     try { dokku.runDokku('storage:unmount', APP, `${STORAGE_DIR}:/app/uploads`); } catch { /* ignore */ }
+    try { rmSync(STORAGE_DIR, { recursive: true }); } catch { /* ignore */ }
     await dokku.cleanup();
   });
 
@@ -60,9 +63,9 @@ describe('snapshot:volume', () => {
   describe('volume backup round-trip', () => {
     it('backs up and restores volume data', async () => {
       // Write test data into the storage directory
-      writeFileSync(`${STORAGE_DIR}/test-file.txt`, 'hello volumes\n');
-      mkdirSync(`${STORAGE_DIR}/subdir`, { recursive: true });
-      writeFileSync(`${STORAGE_DIR}/subdir/nested.txt`, 'nested data\n');
+      writeFileSync(join(STORAGE_DIR, 'test-file.txt'), 'hello volumes\n');
+      mkdirSync(join(STORAGE_DIR, 'subdir'), { recursive: true });
+      writeFileSync(join(STORAGE_DIR, 'subdir', 'nested.txt'), 'nested data\n');
 
       // Create snapshot
       const createResult = await dokku.exec('create', APP);
@@ -79,9 +82,9 @@ describe('snapshot:volume', () => {
       expect(manifest).toContain(STORAGE_DIR);
 
       // Delete the volume contents
-      rmSync(`${STORAGE_DIR}/test-file.txt`);
-      rmSync(`${STORAGE_DIR}/subdir`, { recursive: true });
-      expect(() => readFileSync(`${STORAGE_DIR}/test-file.txt`)).toThrow();
+      rmSync(join(STORAGE_DIR, 'test-file.txt'));
+      rmSync(join(STORAGE_DIR, 'subdir'), { recursive: true });
+      expect(existsSync(join(STORAGE_DIR, 'test-file.txt'))).toBe(false);
 
       // Restore
       const restoreResult = await dokku.exec('restore', APP, snapshotId, '--force');
@@ -89,9 +92,9 @@ describe('snapshot:volume', () => {
       expect(restoreResult.stdout).toContain('Restoring volume');
 
       // Verify data restored
-      const restored = readFileSync(`${STORAGE_DIR}/test-file.txt`, 'utf-8').trim();
+      const restored = readFileSync(join(STORAGE_DIR, 'test-file.txt'), 'utf-8').trim();
       expect(restored).toBe('hello volumes');
-      const nestedRestored = readFileSync(`${STORAGE_DIR}/subdir/nested.txt`, 'utf-8').trim();
+      const nestedRestored = readFileSync(join(STORAGE_DIR, 'subdir', 'nested.txt'), 'utf-8').trim();
       expect(nestedRestored).toBe('nested data');
     });
 
@@ -100,7 +103,7 @@ describe('snapshot:volume', () => {
       await dokku.exec('volume:exclude', APP, STORAGE_DIR);
 
       // Write data
-      writeFileSync(`${STORAGE_DIR}/excluded.txt`, 'should not be backed up\n');
+      writeFileSync(join(STORAGE_DIR, 'excluded.txt'), 'should not be backed up\n');
 
       // Create snapshot
       const createResult = await dokku.exec('create', APP);
