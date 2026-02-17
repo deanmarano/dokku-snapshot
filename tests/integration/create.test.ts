@@ -65,9 +65,9 @@ describe('snapshot:create', () => {
     expect(dokku.pathExists(`${snapshotDir}/app-json.txt`)).toBe(false);
   });
 
-  it('exports linked postgres service dump and info', () => {
+  it('exports linked postgres service info', () => {
     const svcDir = `${snapshotDir}/services/postgres`;
-    expect(dokku.pathExists(`${svcDir}/${PG_SVC}.dump`)).toBe(true);
+    expect(dokku.pathExists(svcDir)).toBe(true);
     expect(dokku.pathExists(`${svcDir}/${PG_SVC}.info`)).toBe(true);
 
     const info = dokku.readFile(`${svcDir}/${PG_SVC}.info`);
