@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { DokkuSnapshot } from '../helpers/dokku';
-import { writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync, readFileSync, existsSync, chmodSync } from 'fs';
 import { mkdtempSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -16,8 +16,10 @@ describe('snapshot:volume', () => {
     dokku = new DokkuSnapshot();
     dokku.createTestApp(APP);
 
-    // Use a temp directory we can write to as the storage mount
+    // Use a temp directory we can write to as the storage mount.
+    // Must be world-readable/writable so the dokku user can tar and extract.
     STORAGE_DIR = mkdtempSync(join(tmpdir(), 'snap-vol-test-'));
+    chmodSync(STORAGE_DIR, 0o777);
     dokku.setStorageMount(APP, `${STORAGE_DIR}:/app/uploads`);
   });
 

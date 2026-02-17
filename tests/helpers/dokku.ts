@@ -179,7 +179,15 @@ export class DokkuSnapshot {
 
   /** Create a postgres service and track for cleanup */
   createPostgresService(name: string): void {
-    this.runDokku('postgres:create', name);
+    try {
+      this.runDokku('postgres:create', name);
+    } catch (e: any) {
+      if (e.stderr?.includes('already exists')) {
+        // Service already exists from a previous failed test run — reuse it
+      } else {
+        throw e;
+      }
+    }
     this.services.push({ type: 'postgres', name });
   }
 
