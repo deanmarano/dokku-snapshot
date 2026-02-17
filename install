@@ -5,6 +5,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config"
 
 echo "-----> Creating snapshot data directory"
 mkdir -p "$PLUGIN_DATA_ROOT"
+mkdir -p "$PLUGIN_DATA_ROOT/.providers"
 
 chown -R "${DOKKU_SYSTEM_USER:-dokku}:${DOKKU_SYSTEM_GROUP:-dokku}" "$PLUGIN_DATA_ROOT" 2>/dev/null || true
 

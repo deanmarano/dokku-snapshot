@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v aws &>/dev/null; then
+  echo "!     Provider 's3': aws CLI is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${BUCKET:-}" ]]; then
+  echo "!     Provider 's3': BUCKET is required" >&2
+  exit 1
+fi
+
+S3_PATH="s3://${BUCKET}/${PREFIX:+${PREFIX}/}"
+AWS_ARGS=()
+[[ -n "${REGION:-}" ]] && AWS_ARGS+=(--region "$REGION")
+[[ -n "${ENDPOINT:-}" ]] && AWS_ARGS+=(--endpoint-url "$ENDPOINT")
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    aws s3 cp "${AWS_ARGS[@]}" "$LOCAL_FILE" "${S3_PATH}${REMOTE_NAME}"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    aws s3 cp "${AWS_ARGS[@]}" "${S3_PATH}${REMOTE_NAME}" "$LOCAL_FILE"
+    ;;
+  list)
+    aws s3 ls "${AWS_ARGS[@]}" "${S3_PATH}" | awk '{print $NF}'
+    ;;
+  test)
+    aws s3 ls "${AWS_ARGS[@]}" "s3://${BUCKET}" >/dev/null
+    echo "OK: S3 bucket ${BUCKET} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

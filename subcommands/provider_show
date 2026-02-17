@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+PROVIDER_NAME="${1:-}"
+
+if [[ -z "$PROVIDER_NAME" ]]; then
+  echo "Usage: dokku snapshot:provider:show <name>" >&2
+  exit 1
+fi
+
+CONFIG_FILE="$PLUGIN_DATA_ROOT/.providers/$PROVIDER_NAME/config"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "!     Provider '$PROVIDER_NAME' not found" >&2
+  exit 1
+fi
+
+echo "-----> Provider '$PROVIDER_NAME' configuration:"
+while IFS='=' read -r key value; do
+  [[ -z "$key" || "$key" == \#* ]] && continue
+  echo "       $key=$value"
+done < "$CONFIG_FILE"

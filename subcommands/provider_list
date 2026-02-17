@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+PROVIDERS_DIR="$PLUGIN_DATA_ROOT/.providers"
+
+if [[ ! -d "$PROVIDERS_DIR" ]]; then
+  echo "No providers configured"
+  exit 0
+fi
+
+FOUND=false
+for dir in "$PROVIDERS_DIR"/*/; do
+  [[ ! -d "$dir" ]] && continue
+  FOUND=true
+  name=$(basename "$dir")
+  type=$(grep '^TYPE=' "$dir/config" 2>/dev/null | cut -d= -f2-)
+  echo "$name (type: ${type:-unknown})"
+done
+
+if [[ "$FOUND" == "false" ]]; then
+  echo "No providers configured"
+fi

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+APP="${1:-}"
+PROVIDER_NAME="${2:-}"
+
+if [[ -z "$APP" || -z "$PROVIDER_NAME" ]]; then
+  echo "Usage: dokku snapshot:provider:set-default <app> <provider-name>" >&2
+  exit 1
+fi
+
+PROVIDER_DIR="$PLUGIN_DATA_ROOT/.providers/$PROVIDER_NAME"
+if [[ ! -d "$PROVIDER_DIR" ]]; then
+  echo "!     Provider '$PROVIDER_NAME' not found" >&2
+  exit 1
+fi
+
+APP_DIR="$PLUGIN_DATA_ROOT/$APP"
+mkdir -p "$APP_DIR"
+echo "$PROVIDER_NAME" > "$APP_DIR/.provider"
+
+echo "-----> Default provider for '$APP' set to '$PROVIDER_NAME'"

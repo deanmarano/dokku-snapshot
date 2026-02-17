@@ -70,3 +70,70 @@ import_service() {
     return 1
   fi
 }
+
+# --- Provider helpers ---
+
+# Load provider config and export as env vars.
+# The PATH key is exported as PATH_DIR to avoid clobbering the system PATH.
+load_provider_config() {
+  local PROVIDER_NAME="$1"
+  local PROVIDER_DIR="$PLUGIN_DATA_ROOT/.providers/$PROVIDER_NAME"
+  local CONFIG_FILE="$PROVIDER_DIR/config"
+
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "!     Provider '$PROVIDER_NAME' not found" >&2
+    return 1
+  fi
+
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    if [[ "$key" == "PATH" ]]; then
+      export PATH_DIR="$value"
+    else
+      export "$key=$value"
+    fi
+  done < "$CONFIG_FILE"
+}
+
+# Resolve which provider to use: --provider flag > app default > error
+resolve_provider() {
+  local APP="$1"
+  local FLAG_PROVIDER="${2:-}"
+
+  if [[ -n "$FLAG_PROVIDER" ]]; then
+    echo "$FLAG_PROVIDER"
+    return 0
+  fi
+
+  local DEFAULT_FILE="$PLUGIN_DATA_ROOT/$APP/.provider"
+  if [[ -f "$DEFAULT_FILE" ]]; then
+    cat "$DEFAULT_FILE"
+    return 0
+  fi
+
+  echo "!     No provider specified. Use --provider <name> or set a default with snapshot:provider:set-default" >&2
+  return 1
+}
+
+# Get provider type from config
+get_provider_type() {
+  local PROVIDER_NAME="$1"
+  local CONFIG_FILE="$PLUGIN_DATA_ROOT/.providers/$PROVIDER_NAME/config"
+  grep '^TYPE=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2-
+}
+
+# Encrypt a snapshot directory to a file
+encrypt_to_file() {
+  local SNAPSHOT_DIR="$1"
+  local OUTPUT_FILE="$2"
+  local PASSWORD="$3"
+  tar czf - -C "$SNAPSHOT_DIR" . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "pass:$PASSWORD" -out "$OUTPUT_FILE"
+}
+
+# Decrypt a file to a directory
+decrypt_from_file() {
+  local INPUT_FILE="$1"
+  local OUTPUT_DIR="$2"
+  local PASSWORD="$3"
+  openssl enc -d -aes-256-cbc -pbkdf2 -salt -pass "pass:$PASSWORD" -in "$INPUT_FILE" | tar xzf - -C "$OUTPUT_DIR"
+}

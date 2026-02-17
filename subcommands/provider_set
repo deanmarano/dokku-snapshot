@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+PROVIDER_NAME="${1:-}"
+KEY="${2:-}"
+VALUE="${3:-}"
+
+if [[ -z "$PROVIDER_NAME" || -z "$KEY" || -z "$VALUE" ]]; then
+  echo "Usage: dokku snapshot:provider:set <name> <key> <value>" >&2
+  exit 1
+fi
+
+CONFIG_FILE="$PLUGIN_DATA_ROOT/.providers/$PROVIDER_NAME/config"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "!     Provider '$PROVIDER_NAME' not found" >&2
+  exit 1
+fi
+
+KEY=$(echo "$KEY" | tr '[:lower:]-' '[:upper:]_')
+
+# Update or append the key
+if grep -q "^${KEY}=" "$CONFIG_FILE" 2>/dev/null; then
+  sed -i "s|^${KEY}=.*|${KEY}=${VALUE}|" "$CONFIG_FILE"
+else
+  echo "${KEY}=${VALUE}" >> "$CONFIG_FILE"
+fi
+
+echo "-----> Set $KEY for provider '$PROVIDER_NAME'"

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+source "$PLUGIN_BASE/functions"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+PROVIDER_NAME="${1:-}"
+
+if [[ -z "$PROVIDER_NAME" ]]; then
+  echo "Usage: dokku snapshot:provider:test <name>" >&2
+  exit 1
+fi
+
+load_provider_config "$PROVIDER_NAME"
+
+PROVIDER_TYPE=$(get_provider_type "$PROVIDER_NAME")
+PROVIDER_SCRIPT="$PLUGIN_BASE/providers/$PROVIDER_TYPE"
+if [[ ! -x "$PROVIDER_SCRIPT" ]]; then
+  echo "!     Unknown provider type: $PROVIDER_TYPE" >&2
+  exit 1
+fi
+
+echo "-----> Testing provider '$PROVIDER_NAME' ($PROVIDER_TYPE)..."
+"$PROVIDER_SCRIPT" test

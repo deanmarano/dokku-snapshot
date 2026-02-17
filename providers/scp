@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v scp &>/dev/null; then
+  echo "!     Provider 'scp': scp is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${HOST:-}" ]]; then
+  echo "!     Provider 'scp': HOST is required" >&2
+  exit 1
+fi
+if [[ -z "${PATH_DIR:-}" ]]; then
+  echo "!     Provider 'scp': PATH is required" >&2
+  exit 1
+fi
+
+SCP_ARGS=(-q)
+SSH_ARGS=()
+[[ -n "${PORT:-}" ]] && SCP_ARGS+=(-P "$PORT") && SSH_ARGS+=(-p "$PORT")
+[[ -n "${SSH_KEY:-}" ]] && SCP_ARGS+=(-i "$SSH_KEY") && SSH_ARGS+=(-i "$SSH_KEY")
+
+REMOTE_USER="${USER:-root}"
+REMOTE_BASE="${REMOTE_USER}@${HOST}:${PATH_DIR}"
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    ssh "${SSH_ARGS[@]}" "${REMOTE_USER}@${HOST}" "mkdir -p '${PATH_DIR}'"
+    scp "${SCP_ARGS[@]}" "$LOCAL_FILE" "${REMOTE_BASE}/${REMOTE_NAME}"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    scp "${SCP_ARGS[@]}" "${REMOTE_BASE}/${REMOTE_NAME}" "$LOCAL_FILE"
+    ;;
+  list)
+    ssh "${SSH_ARGS[@]}" "${REMOTE_USER}@${HOST}" "ls -1 '${PATH_DIR}' 2>/dev/null" || true
+    ;;
+  test)
+    ssh "${SSH_ARGS[@]}" "${REMOTE_USER}@${HOST}" "test -d '${PATH_DIR}' || mkdir -p '${PATH_DIR}'"
+    echo "OK: scp to ${HOST}:${PATH_DIR} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

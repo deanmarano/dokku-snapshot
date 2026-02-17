@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+source "$PLUGIN_BASE/functions"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+# Parse arguments
+APP=""
+SNAPSHOT_ID=""
+PASSWORD=""
+PROVIDER_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --password)
+      PASSWORD="$2"
+      shift 2
+      ;;
+    --provider)
+      PROVIDER_FLAG="$2"
+      shift 2
+      ;;
+    -*)
+      echo "!     Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      if [[ -z "$APP" ]]; then
+        APP="$1"
+      elif [[ -z "$SNAPSHOT_ID" ]]; then
+        SNAPSHOT_ID="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$APP" || -z "$SNAPSHOT_ID" ]]; then
+  echo "Usage: dokku snapshot:upload <app> <snapshot-id> --password <pw> [--provider <name>]" >&2
+  exit 1
+fi
+
+PASSWORD="${PASSWORD:-${SNAPSHOT_PASSWORD:-}}"
+if [[ -z "$PASSWORD" ]]; then
+  echo "!     Password is required. Use --password <pw> or set SNAPSHOT_PASSWORD env var." >&2
+  exit 1
+fi
+
+SNAPSHOT_DIR="$PLUGIN_DATA_ROOT/$APP/$SNAPSHOT_ID"
+if [[ ! -d "$SNAPSHOT_DIR" ]]; then
+  echo "!     Snapshot $SNAPSHOT_ID not found for app $APP" >&2
+  exit 1
+fi
+
+PROVIDER_NAME=$(resolve_provider "$APP" "$PROVIDER_FLAG")
+load_provider_config "$PROVIDER_NAME"
+
+PROVIDER_TYPE=$(get_provider_type "$PROVIDER_NAME")
+PROVIDER_SCRIPT="$PLUGIN_BASE/providers/$PROVIDER_TYPE"
+if [[ ! -x "$PROVIDER_SCRIPT" ]]; then
+  echo "!     Unknown provider type: $PROVIDER_TYPE" >&2
+  exit 1
+fi
+
+TEMP_FILE=$(mktemp)
+trap 'rm -f "$TEMP_FILE"' EXIT
+
+REMOTE_NAME="${APP}-${SNAPSHOT_ID}.tar.gz.enc"
+
+echo "-----> Encrypting snapshot $SNAPSHOT_ID of $APP"
+encrypt_to_file "$SNAPSHOT_DIR" "$TEMP_FILE" "$PASSWORD"
+
+echo "-----> Uploading to provider '$PROVIDER_NAME' ($PROVIDER_TYPE)"
+"$PROVIDER_SCRIPT" upload "$TEMP_FILE" "$REMOTE_NAME"
+
+echo "       Uploaded as $REMOTE_NAME"

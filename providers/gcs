@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v gsutil &>/dev/null; then
+  echo "!     Provider 'gcs': gsutil is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${BUCKET:-}" ]]; then
+  echo "!     Provider 'gcs': BUCKET is required" >&2
+  exit 1
+fi
+
+GCS_PATH="gs://${BUCKET}/${PREFIX:+${PREFIX}/}"
+
+if [[ -n "${CREDENTIALS_FILE:-}" ]]; then
+  export GOOGLE_APPLICATION_CREDENTIALS="$CREDENTIALS_FILE"
+fi
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    gsutil cp "$LOCAL_FILE" "${GCS_PATH}${REMOTE_NAME}"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    gsutil cp "${GCS_PATH}${REMOTE_NAME}" "$LOCAL_FILE"
+    ;;
+  list)
+    gsutil ls "${GCS_PATH}" 2>/dev/null | xargs -n1 basename
+    ;;
+  test)
+    gsutil ls "gs://${BUCKET}" >/dev/null
+    echo "OK: GCS bucket ${BUCKET} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

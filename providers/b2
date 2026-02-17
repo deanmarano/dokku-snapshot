@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v b2 &>/dev/null; then
+  echo "!     Provider 'b2': b2 CLI is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${BUCKET:-}" ]]; then
+  echo "!     Provider 'b2': BUCKET is required" >&2
+  exit 1
+fi
+if [[ -z "${KEY_ID:-}" ]]; then
+  echo "!     Provider 'b2': KEY_ID is required" >&2
+  exit 1
+fi
+if [[ -z "${APP_KEY:-}" ]]; then
+  echo "!     Provider 'b2': APP_KEY is required" >&2
+  exit 1
+fi
+
+b2 authorize-account "$KEY_ID" "$APP_KEY" >/dev/null
+
+remote_path() {
+  local name="$1"
+  echo "${PREFIX:+${PREFIX}/}${name}"
+}
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    b2 upload-file "$BUCKET" "$LOCAL_FILE" "$(remote_path "$REMOTE_NAME")"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    b2 download-file-by-name "$BUCKET" "$(remote_path "$REMOTE_NAME")" "$LOCAL_FILE"
+    ;;
+  list)
+    b2 ls "$BUCKET" "${PREFIX:-}" | while read -r name; do
+      basename "$name"
+    done
+    ;;
+  test)
+    b2 get-bucket "$BUCKET" >/dev/null
+    echo "OK: B2 bucket ${BUCKET} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

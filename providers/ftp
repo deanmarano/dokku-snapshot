@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v curl &>/dev/null; then
+  echo "!     Provider 'ftp': curl is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${HOST:-}" ]]; then
+  echo "!     Provider 'ftp': HOST is required" >&2
+  exit 1
+fi
+if [[ -z "${PATH_DIR:-}" ]]; then
+  echo "!     Provider 'ftp': PATH is required" >&2
+  exit 1
+fi
+if [[ -z "${USER:-}" ]]; then
+  echo "!     Provider 'ftp': USER is required" >&2
+  exit 1
+fi
+if [[ -z "${PASSWORD:-}" ]]; then
+  echo "!     Provider 'ftp': PASSWORD is required" >&2
+  exit 1
+fi
+
+FTP_PORT="${PORT:-21}"
+PROTOCOL="ftp"
+CURL_ARGS=(--user "${USER}:${PASSWORD}")
+if [[ "${TLS:-}" == "true" ]]; then
+  CURL_ARGS+=(--ssl-reqd)
+fi
+
+BASE_URL="${PROTOCOL}://${HOST}:${FTP_PORT}${PATH_DIR}"
+# Ensure trailing slash for directory URLs
+[[ "$BASE_URL" != */ ]] && BASE_URL="${BASE_URL}/"
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    curl "${CURL_ARGS[@]}" --ftp-create-dirs -T "$LOCAL_FILE" "${BASE_URL}${REMOTE_NAME}"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    curl "${CURL_ARGS[@]}" -o "$LOCAL_FILE" "${BASE_URL}${REMOTE_NAME}"
+    ;;
+  list)
+    curl "${CURL_ARGS[@]}" --list-only "${BASE_URL}" 2>/dev/null || true
+    ;;
+  test)
+    curl "${CURL_ARGS[@]}" --list-only "${BASE_URL}" >/dev/null 2>&1
+    echo "OK: FTP ${HOST}:${FTP_PORT}${PATH_DIR} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

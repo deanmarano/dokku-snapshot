@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v rsync &>/dev/null; then
+  echo "!     Provider 'rsync': rsync is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${HOST:-}" ]]; then
+  echo "!     Provider 'rsync': HOST is required" >&2
+  exit 1
+fi
+if [[ -z "${PATH_DIR:-}" ]]; then
+  echo "!     Provider 'rsync': PATH is required" >&2
+  exit 1
+fi
+
+RSYNC_ARGS=(-az)
+SSH_CMD="ssh"
+[[ -n "${PORT:-}" ]] && SSH_CMD="ssh -p ${PORT}"
+[[ -n "${SSH_KEY:-}" ]] && SSH_CMD="${SSH_CMD} -i ${SSH_KEY}"
+RSYNC_ARGS+=(-e "$SSH_CMD")
+
+REMOTE_USER="${USER:-root}"
+REMOTE_BASE="${REMOTE_USER}@${HOST}:${PATH_DIR}"
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    rsync "${RSYNC_ARGS[@]}" "$LOCAL_FILE" "${REMOTE_BASE}/${REMOTE_NAME}"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    rsync "${RSYNC_ARGS[@]}" "${REMOTE_BASE}/${REMOTE_NAME}" "$LOCAL_FILE"
+    ;;
+  list)
+    rsync "${RSYNC_ARGS[@]}" --list-only "${REMOTE_BASE}/" 2>/dev/null | awk '{print $NF}' | grep -v '^\.$'
+    ;;
+  test)
+    rsync "${RSYNC_ARGS[@]}" --list-only "${REMOTE_BASE}/" >/dev/null 2>&1
+    echo "OK: rsync to ${HOST}:${PATH_DIR} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

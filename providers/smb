@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v smbclient &>/dev/null; then
+  echo "!     Provider 'smb': smbclient is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${HOST:-}" ]]; then
+  echo "!     Provider 'smb': HOST is required" >&2
+  exit 1
+fi
+if [[ -z "${SHARE:-}" ]]; then
+  echo "!     Provider 'smb': SHARE is required" >&2
+  exit 1
+fi
+if [[ -z "${USER:-}" ]]; then
+  echo "!     Provider 'smb': USER is required" >&2
+  exit 1
+fi
+if [[ -z "${PASSWORD:-}" ]]; then
+  echo "!     Provider 'smb': PASSWORD is required" >&2
+  exit 1
+fi
+
+SMB_URL="//${HOST}/${SHARE}"
+SMB_ARGS=(-U "${USER}%${PASSWORD}")
+[[ -n "${DOMAIN:-}" ]] && SMB_ARGS+=(-W "$DOMAIN")
+REMOTE_DIR="${PATH_DIR:-.}"
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    smbclient "$SMB_URL" "${SMB_ARGS[@]}" -c "mkdir ${REMOTE_DIR} 2>/dev/null; cd ${REMOTE_DIR}; put ${LOCAL_FILE} ${REMOTE_NAME}"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    smbclient "$SMB_URL" "${SMB_ARGS[@]}" -c "cd ${REMOTE_DIR}; get ${REMOTE_NAME} ${LOCAL_FILE}"
+    ;;
+  list)
+    smbclient "$SMB_URL" "${SMB_ARGS[@]}" -c "cd ${REMOTE_DIR}; ls" 2>/dev/null | grep -v '^\s' | awk '{print $1}' | grep -v '^\.' || true
+    ;;
+  test)
+    smbclient "$SMB_URL" "${SMB_ARGS[@]}" -c "ls" >/dev/null 2>&1
+    echo "OK: SMB share //${HOST}/${SHARE} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

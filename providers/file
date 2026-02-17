@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+# Required: PATH (the destination directory)
+if [[ -z "${PATH_DIR:-}" ]]; then
+  echo "!     Provider 'file': PATH is required" >&2
+  exit 1
+fi
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    mkdir -p "$PATH_DIR"
+    cp "$LOCAL_FILE" "$PATH_DIR/$REMOTE_NAME"
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    if [[ ! -f "$PATH_DIR/$REMOTE_NAME" ]]; then
+      echo "!     File not found: $PATH_DIR/$REMOTE_NAME" >&2
+      exit 1
+    fi
+    cp "$PATH_DIR/$REMOTE_NAME" "$LOCAL_FILE"
+    ;;
+  list)
+    if [[ -d "$PATH_DIR" ]]; then
+      ls -1 "$PATH_DIR" 2>/dev/null || true
+    fi
+    ;;
+  test)
+    mkdir -p "$PATH_DIR"
+    TESTFILE="$PATH_DIR/.snapshot-test-$$"
+    if touch "$TESTFILE" 2>/dev/null && rm -f "$TESTFILE"; then
+      echo "OK: Path $PATH_DIR is writable"
+    else
+      echo "!     Path $PATH_DIR is not writable" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

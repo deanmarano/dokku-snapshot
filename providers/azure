@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+ACTION="$1"; shift
+
+if ! command -v az &>/dev/null; then
+  echo "!     Provider 'azure': az CLI is required but not found" >&2
+  exit 1
+fi
+
+if [[ -z "${CONTAINER:-}" ]]; then
+  echo "!     Provider 'azure': CONTAINER is required" >&2
+  exit 1
+fi
+if [[ -z "${ACCOUNT:-}" ]]; then
+  echo "!     Provider 'azure': ACCOUNT is required" >&2
+  exit 1
+fi
+
+AZ_ARGS=(--account-name "$ACCOUNT" --container-name "$CONTAINER")
+[[ -n "${KEY:-}" ]] && AZ_ARGS+=(--account-key "$KEY")
+
+blob_name() {
+  local name="$1"
+  echo "${PREFIX:+${PREFIX}/}${name}"
+}
+
+case "$ACTION" in
+  upload)
+    LOCAL_FILE="$1"
+    REMOTE_NAME="$2"
+    az storage blob upload "${AZ_ARGS[@]}" --file "$LOCAL_FILE" --name "$(blob_name "$REMOTE_NAME")" --overwrite
+    ;;
+  download)
+    REMOTE_NAME="$1"
+    LOCAL_FILE="$2"
+    az storage blob download "${AZ_ARGS[@]}" --name "$(blob_name "$REMOTE_NAME")" --file "$LOCAL_FILE"
+    ;;
+  list)
+    az storage blob list "${AZ_ARGS[@]}" --prefix "${PREFIX:-}" --query "[].name" -o tsv | while read -r name; do
+      basename "$name"
+    done
+    ;;
+  test)
+    az storage container show "${AZ_ARGS[@]}" >/dev/null
+    echo "OK: Azure container ${CONTAINER} is accessible"
+    ;;
+  *)
+    echo "!     Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac
