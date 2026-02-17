@@ -33,39 +33,11 @@ cat > "$SNAPSHOT_DIR/metadata.json" << EOF
   "app": "$APP",
   "timestamp": "$TIMESTAMP",
   "dokku_version": "$("$DOKKU_BIN" version 2>/dev/null || echo "unknown")",
-  "snapshot_version": "3"
+  "snapshot_version": "4"
 }
 EOF
 
-# Config vars
-"$DOKKU_BIN" config:export "$APP" > "$SNAPSHOT_DIR/config.env" 2>/dev/null || true
-
-# Reports
-"$DOKKU_BIN" domains:report "$APP" > "$SNAPSHOT_DIR/domains.txt" 2>/dev/null || true
-"$DOKKU_BIN" proxy:report "$APP" > "$SNAPSHOT_DIR/proxy.txt" 2>/dev/null || true
-"$DOKKU_BIN" network:report "$APP" > "$SNAPSHOT_DIR/network.txt" 2>/dev/null || true
-"$DOKKU_BIN" storage:report "$APP" > "$SNAPSHOT_DIR/storage.txt" 2>/dev/null || true
-"$DOKKU_BIN" ps:report "$APP" > "$SNAPSHOT_DIR/ps.txt" 2>/dev/null || true
-"$DOKKU_BIN" docker-options:report "$APP" > "$SNAPSHOT_DIR/docker-options.txt" 2>/dev/null || true
-"$DOKKU_BIN" ports:list "$APP" > "$SNAPSHOT_DIR/ports.txt" 2>/dev/null || true
-"$DOKKU_BIN" ps:scale "$APP" > "$SNAPSHOT_DIR/ps-scale.txt" 2>/dev/null || true
-"$DOKKU_BIN" git:report "$APP" > "$SNAPSHOT_DIR/git.txt" 2>/dev/null || true
-"$DOKKU_BIN" checks:report "$APP" > "$SNAPSHOT_DIR/checks.txt" 2>/dev/null || true
-"$DOKKU_BIN" resource:report "$APP" > "$SNAPSHOT_DIR/resource.txt" 2>/dev/null || true
-"$DOKKU_BIN" builder:report "$APP" > "$SNAPSHOT_DIR/builder.txt" 2>/dev/null || true
-"$DOKKU_BIN" buildpacks:report "$APP" > "$SNAPSHOT_DIR/buildpacks.txt" 2>/dev/null || true
-"$DOKKU_BIN" letsencrypt:report "$APP" > "$SNAPSHOT_DIR/letsencrypt.txt" 2>/dev/null || true
-"$DOKKU_BIN" certs:report "$APP" > "$SNAPSHOT_DIR/certs.txt" 2>/dev/null || true
-"$DOKKU_BIN" nginx:report "$APP" > "$SNAPSHOT_DIR/nginx.txt" 2>/dev/null || true
-"$DOKKU_BIN" scheduler:report "$APP" > "$SNAPSHOT_DIR/scheduler.txt" 2>/dev/null || true
-"$DOKKU_BIN" registry:report "$APP" > "$SNAPSHOT_DIR/registry.txt" 2>/dev/null || true
-"$DOKKU_BIN" cron:report "$APP" > "$SNAPSHOT_DIR/cron.txt" 2>/dev/null || true
-"$DOKKU_BIN" app-json:report "$APP" > "$SNAPSHOT_DIR/app-json.txt" 2>/dev/null || true
-
 # Detect and export linked services
-# Use fd 3 for the loop input so that commands inside the loop keep their
-# original stdin.  Dokku plugin commands (basher dispatch) fail when stdin
-# is a pipe, which is what happens with a plain `cmd | while read` construct.
 while read -r svc_type svc_name <&3; do
   [[ -z "$svc_type" || -z "$svc_name" ]] && continue
   echo "       Exporting $svc_type service: $svc_name"
@@ -73,6 +45,62 @@ while read -r svc_type svc_name <&3; do
   export_service_info "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.info"
   export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
 done 3< <(detect_linked_services "$APP") || true
+
+# Backup storage volumes
+storage_report=$("$DOKKU_BIN" storage:report "$APP" 2>/dev/null) || true
+EXCLUDED_FILE="$PLUGIN_DATA_ROOT/$APP/.excluded-volumes"
+
+# Collect all mount host paths from storage report
+all_mounts=()
+for phase in "Storage build mounts" "Storage deploy mounts" "Storage run mounts"; do
+  mounts_val=$(echo "$storage_report" | grep -oP "${phase}:\s*\K.*" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+  if [[ -n "$mounts_val" ]]; then
+    IFS=',' read -ra mount_pairs <<< "$mounts_val"
+    for pair in "${mount_pairs[@]}"; do
+      pair=$(echo "$pair" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      [[ -z "$pair" ]] && continue
+      # Extract host path (before the colon)
+      host_path="${pair%%:*}"
+      [[ -z "$host_path" ]] && continue
+      # Deduplicate
+      already=false
+      for existing in "${all_mounts[@]:-}"; do
+        [[ "$existing" == "$host_path" ]] && already=true && break
+      done
+      [[ "$already" == "false" ]] && all_mounts+=("$host_path")
+    done
+  fi
+done
+
+if [[ ${#all_mounts[@]} -gt 0 ]]; then
+  mkdir -p "$SNAPSHOT_DIR/volumes"
+  : > "$SNAPSHOT_DIR/volumes/manifest.txt"
+
+  for host_path in "${all_mounts[@]}"; do
+    # Check exclusion list
+    if [[ -f "$EXCLUDED_FILE" ]] && grep -qxF "$host_path" "$EXCLUDED_FILE" 2>/dev/null; then
+      echo "       Skipping excluded volume: $host_path"
+      continue
+    fi
+
+    if [[ ! -d "$host_path" ]]; then
+      echo "       Skipping missing volume: $host_path"
+      continue
+    fi
+
+    # Sanitize path for filename: replace / with -
+    sanitized=$(echo "$host_path" | sed 's|^/||;s|/|-|g')
+    tar_file="$SNAPSHOT_DIR/volumes/${sanitized}.tar.gz"
+
+    echo "       Backing up volume: $host_path"
+    tar czf "$tar_file" -C "$host_path" . 2>/dev/null || {
+      echo "!      Warning: Failed to backup volume $host_path" >&2
+      rm -f "$tar_file"
+      continue
+    }
+    echo "${sanitized}.tar.gz=$host_path" >> "$SNAPSHOT_DIR/volumes/manifest.txt"
+  done
+fi
 
 echo "-----> Snapshot created: $TIMESTAMP"
 echo "       Location: $SNAPSHOT_DIR"

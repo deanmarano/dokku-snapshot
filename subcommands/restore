@@ -52,313 +52,12 @@ if [[ ! -d "$SNAPSHOT_DIR" ]]; then
 fi
 
 if [[ "$FORCE" != "true" ]]; then
-  echo "!     Restore will overwrite current app configuration." >&2
+  echo "!     Restore will overwrite current app data." >&2
   echo "       Run with --force to confirm." >&2
   exit 1
 fi
 
 echo "-----> Restoring $APP from snapshot $SNAPSHOT_ID"
-
-# Restore config vars
-if [[ -f "$SNAPSHOT_DIR/config.env" && -s "$SNAPSHOT_DIR/config.env" ]]; then
-  echo "       Restoring config vars"
-  # Parse export lines and set them
-  local_vars=()
-  while IFS= read -r line; do
-    # Match: export KEY='VALUE'
-    if [[ "$line" =~ ^export\ ([^=]+)=\'(.*)\'$ ]]; then
-      local_vars+=("${BASH_REMATCH[1]}=${BASH_REMATCH[2]}")
-    fi
-  done < "$SNAPSHOT_DIR/config.env"
-
-  if [[ ${#local_vars[@]} -gt 0 ]]; then
-    "$DOKKU_BIN" config:set --no-restart "$APP" "${local_vars[@]}"
-  fi
-fi
-
-# Restore domains
-if [[ -f "$SNAPSHOT_DIR/domains.txt" ]]; then
-  echo "       Restoring domains"
-  # Parse "Domains app vhosts:" line
-  app_vhosts=$(grep -oP 'Domains app vhosts:\s*\K.*' "$SNAPSHOT_DIR/domains.txt" || true)
-  if [[ -n "$app_vhosts" ]]; then
-    # Clear existing domains first
-    "$DOKKU_BIN" domains:clear "$APP" 2>/dev/null || true
-    for domain in $app_vhosts; do
-      "$DOKKU_BIN" domains:add "$APP" "$domain" 2>/dev/null || true
-    done
-  fi
-fi
-
-# Restore ports
-if [[ -f "$SNAPSHOT_DIR/ports.txt" && -s "$SNAPSHOT_DIR/ports.txt" ]]; then
-  echo "       Restoring port mappings"
-  "$DOKKU_BIN" ports:clear "$APP" 2>/dev/null || true
-  local_ports=()
-  while IFS= read -r line; do
-    # Skip header lines and empty lines
-    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-    [[ "$line" =~ -----\> ]] && continue
-    [[ "$line" =~ ^[[:space:]]*scheme ]] && continue
-    # Parse: scheme host-port container-port
-    read -r scheme host_port container_port <<< "$line"
-    [[ -z "$scheme" || -z "$host_port" || -z "$container_port" ]] && continue
-    local_ports+=("$scheme:$host_port:$container_port")
-  done < "$SNAPSHOT_DIR/ports.txt"
-  if [[ ${#local_ports[@]} -gt 0 ]]; then
-    "$DOKKU_BIN" ports:set "$APP" "${local_ports[@]}" 2>/dev/null || true
-  fi
-fi
-
-# Restore proxy settings
-if [[ -f "$SNAPSHOT_DIR/proxy.txt" && -s "$SNAPSHOT_DIR/proxy.txt" ]]; then
-  echo "       Restoring proxy settings"
-  proxy_enabled=$(parse_report_field "$SNAPSHOT_DIR/proxy.txt" "Proxy enabled")
-  if [[ "$proxy_enabled" == "true" ]]; then
-    "$DOKKU_BIN" proxy:enable "$APP" 2>/dev/null || true
-  elif [[ "$proxy_enabled" == "false" ]]; then
-    "$DOKKU_BIN" proxy:disable "$APP" 2>/dev/null || true
-  fi
-fi
-
-# Restore network settings
-if [[ -f "$SNAPSHOT_DIR/network.txt" && -s "$SNAPSHOT_DIR/network.txt" ]]; then
-  echo "       Restoring network settings"
-  net_props=("bind-all-interfaces" "attach-post-create" "attach-post-deploy" "initial-network")
-  net_field_map=("Proxy bind all interfaces" "Attach post create" "Attach post deploy" "Initial network")
-  for i in "${!net_props[@]}"; do
-    val=$(parse_report_field "$SNAPSHOT_DIR/network.txt" "${net_field_map[$i]}")
-    if [[ -n "$val" ]]; then
-      "$DOKKU_BIN" network:set "$APP" "${net_props[$i]}" "$val" 2>/dev/null || true
-    fi
-  done
-fi
-
-# Restore docker options
-if [[ -f "$SNAPSHOT_DIR/docker-options.txt" && -s "$SNAPSHOT_DIR/docker-options.txt" ]]; then
-  echo "       Restoring docker options"
-  for phase in build deploy run; do
-    case "$phase" in
-      build) field_name="Docker options build" ;;
-      deploy) field_name="Docker options deploy" ;;
-      run) field_name="Docker options run" ;;
-    esac
-    options_val=$(parse_report_field "$SNAPSHOT_DIR/docker-options.txt" "$field_name")
-    if [[ -n "$options_val" ]]; then
-      # Options are comma-separated in report output
-      IFS=',' read -ra opts <<< "$options_val"
-      for opt in "${opts[@]}"; do
-        opt=$(echo "$opt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        [[ -z "$opt" ]] && continue
-        "$DOKKU_BIN" docker-options:add "$APP" "$phase" "$opt" 2>/dev/null || true
-      done
-    fi
-  done
-fi
-
-# Restore PS settings
-if [[ -f "$SNAPSHOT_DIR/ps.txt" && -s "$SNAPSHOT_DIR/ps.txt" ]]; then
-  echo "       Restoring ps settings"
-  restart_policy=$(parse_report_field "$SNAPSHOT_DIR/ps.txt" "Restart policy")
-  if [[ -n "$restart_policy" ]]; then
-    "$DOKKU_BIN" ps:set "$APP" restart-policy "$restart_policy" 2>/dev/null || true
-  fi
-fi
-
-# Restore PS scaling
-if [[ -f "$SNAPSHOT_DIR/ps-scale.txt" && -s "$SNAPSHOT_DIR/ps-scale.txt" ]]; then
-  echo "       Restoring process scaling"
-  local_scale_args=()
-  while IFS= read -r line; do
-    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-    [[ "$line" =~ -----\> ]] && continue
-    [[ "$line" =~ ^[[:space:]]*(Proctype|proctype) ]] && continue
-    # Parse: proctype count
-    read -r proctype count <<< "$line"
-    [[ -z "$proctype" || -z "$count" ]] && continue
-    local_scale_args+=("$proctype=$count")
-  done < "$SNAPSHOT_DIR/ps-scale.txt"
-  if [[ ${#local_scale_args[@]} -gt 0 ]]; then
-    "$DOKKU_BIN" ps:scale "$APP" "${local_scale_args[@]}" 2>/dev/null || true
-  fi
-fi
-
-# Restore storage mounts
-if [[ -f "$SNAPSHOT_DIR/storage.txt" && -s "$SNAPSHOT_DIR/storage.txt" ]]; then
-  echo "       Restoring storage mounts"
-  storage_mounts=$(parse_report_field "$SNAPSHOT_DIR/storage.txt" "Storage build mounts")
-  if [[ -n "$storage_mounts" ]]; then
-    IFS=',' read -ra mounts <<< "$storage_mounts"
-    for mount in "${mounts[@]}"; do
-      mount=$(echo "$mount" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [[ -z "$mount" ]] && continue
-      "$DOKKU_BIN" storage:mount "$APP" "$mount" 2>/dev/null || true
-    done
-  fi
-  storage_mounts=$(parse_report_field "$SNAPSHOT_DIR/storage.txt" "Storage deploy mounts")
-  if [[ -n "$storage_mounts" ]]; then
-    IFS=',' read -ra mounts <<< "$storage_mounts"
-    for mount in "${mounts[@]}"; do
-      mount=$(echo "$mount" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [[ -z "$mount" ]] && continue
-      "$DOKKU_BIN" storage:mount "$APP" "$mount" 2>/dev/null || true
-    done
-  fi
-  storage_mounts=$(parse_report_field "$SNAPSHOT_DIR/storage.txt" "Storage run mounts")
-  if [[ -n "$storage_mounts" ]]; then
-    IFS=',' read -ra mounts <<< "$storage_mounts"
-    for mount in "${mounts[@]}"; do
-      mount=$(echo "$mount" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [[ -z "$mount" ]] && continue
-      "$DOKKU_BIN" storage:mount "$APP" "$mount" 2>/dev/null || true
-    done
-  fi
-fi
-
-# Restore git settings
-if [[ -f "$SNAPSHOT_DIR/git.txt" && -s "$SNAPSHOT_DIR/git.txt" ]]; then
-  echo "       Restoring git settings"
-  deploy_branch=$(parse_report_field "$SNAPSHOT_DIR/git.txt" "Git deploy branch")
-  if [[ -n "$deploy_branch" ]]; then
-    "$DOKKU_BIN" git:set "$APP" deploy-branch "$deploy_branch" 2>/dev/null || true
-  fi
-  keep_git_dir=$(parse_report_field "$SNAPSHOT_DIR/git.txt" "Git keep git dir")
-  if [[ -n "$keep_git_dir" ]]; then
-    "$DOKKU_BIN" git:set "$APP" keep-git-dir "$keep_git_dir" 2>/dev/null || true
-  fi
-fi
-
-# Restore checks settings
-if [[ -f "$SNAPSHOT_DIR/checks.txt" && -s "$SNAPSHOT_DIR/checks.txt" ]]; then
-  echo "       Restoring checks settings"
-  checks_disabled=$(parse_report_field "$SNAPSHOT_DIR/checks.txt" "Checks disabled list")
-  if [[ -n "$checks_disabled" ]]; then
-    "$DOKKU_BIN" checks:disable "$APP" "$checks_disabled" 2>/dev/null || true
-  fi
-  checks_skipped=$(parse_report_field "$SNAPSHOT_DIR/checks.txt" "Checks skipped list")
-  if [[ -n "$checks_skipped" ]]; then
-    "$DOKKU_BIN" checks:skip "$APP" "$checks_skipped" 2>/dev/null || true
-  fi
-fi
-
-# Restore resource limits
-if [[ -f "$SNAPSHOT_DIR/resource.txt" && -s "$SNAPSHOT_DIR/resource.txt" ]]; then
-  echo "       Restoring resource limits"
-  memory_limit=$(parse_report_field "$SNAPSHOT_DIR/resource.txt" "Resource memory")
-  if [[ -n "$memory_limit" ]]; then
-    "$DOKKU_BIN" resource:limit "$APP" --memory "$memory_limit" 2>/dev/null || true
-  fi
-  cpu_limit=$(parse_report_field "$SNAPSHOT_DIR/resource.txt" "Resource cpu")
-  if [[ -n "$cpu_limit" ]]; then
-    "$DOKKU_BIN" resource:limit "$APP" --cpu "$cpu_limit" 2>/dev/null || true
-  fi
-fi
-
-# Restore builder settings
-if [[ -f "$SNAPSHOT_DIR/builder.txt" && -s "$SNAPSHOT_DIR/builder.txt" ]]; then
-  echo "       Restoring builder settings"
-  selected_builder=$(parse_report_field "$SNAPSHOT_DIR/builder.txt" "Builder selected")
-  if [[ -n "$selected_builder" ]]; then
-    "$DOKKU_BIN" builder:set "$APP" selected "$selected_builder" 2>/dev/null || true
-  fi
-fi
-
-# Restore buildpacks
-if [[ -f "$SNAPSHOT_DIR/buildpacks.txt" && -s "$SNAPSHOT_DIR/buildpacks.txt" ]]; then
-  echo "       Restoring buildpacks"
-  buildpack_list=$(parse_report_field "$SNAPSHOT_DIR/buildpacks.txt" "Buildpacks list")
-  if [[ -n "$buildpack_list" ]]; then
-    "$DOKKU_BIN" buildpacks:clear "$APP" 2>/dev/null || true
-    IFS=',' read -ra bps <<< "$buildpack_list"
-    for bp in "${bps[@]}"; do
-      bp=$(echo "$bp" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [[ -z "$bp" ]] && continue
-      "$DOKKU_BIN" buildpacks:add "$APP" "$bp" 2>/dev/null || true
-    done
-  fi
-fi
-
-# Restore letsencrypt settings
-if [[ -f "$SNAPSHOT_DIR/letsencrypt.txt" && -s "$SNAPSHOT_DIR/letsencrypt.txt" ]]; then
-  echo "       Restoring letsencrypt settings"
-  le_email=$(parse_report_field "$SNAPSHOT_DIR/letsencrypt.txt" "Letsencrypt email")
-  if [[ -n "$le_email" ]]; then
-    "$DOKKU_BIN" letsencrypt:set "$APP" email "$le_email" 2>/dev/null || true
-  fi
-fi
-
-# Restore nginx settings (app-level overrides only)
-if [[ -f "$SNAPSHOT_DIR/nginx.txt" && -s "$SNAPSHOT_DIR/nginx.txt" ]]; then
-  echo "       Restoring nginx settings"
-  # Parse app-level properties: lines with "Nginx <prop>:" but NOT "computed" or "global"
-  while IFS= read -r line; do
-    # Skip computed/global/header lines
-    [[ "$line" =~ computed ]] && continue
-    [[ "$line" =~ global ]] && continue
-    [[ "$line" =~ ====\> ]] && continue
-    # Match: "Nginx <property name>:    <value>"
-    if [[ "$line" =~ ^[[:space:]]*Nginx\ ([^:]+):[[:space:]]*(.+)$ ]]; then
-      field_name="${BASH_REMATCH[1]}"
-      field_value="${BASH_REMATCH[2]}"
-      # Trim trailing whitespace from value
-      while [[ "$field_value" =~ [[:space:]]$ ]]; do field_value="${field_value% }"; done
-      [[ -z "$field_value" ]] && continue
-      # Skip "last visited at" - not a settable property
-      [[ "$field_name" == "last visited at" ]] && continue
-      # Convert field name to kebab-case property: "client max body size" -> "client-max-body-size"
-      prop_name="${field_name// /-}"
-      "$DOKKU_BIN" nginx:set "$APP" "$prop_name" "$field_value" 2>/dev/null || true
-    fi
-  done < "$SNAPSHOT_DIR/nginx.txt"
-fi
-
-# Restore scheduler settings
-if [[ -f "$SNAPSHOT_DIR/scheduler.txt" && -s "$SNAPSHOT_DIR/scheduler.txt" ]]; then
-  echo "       Restoring scheduler settings"
-  selected_scheduler=$(parse_report_field "$SNAPSHOT_DIR/scheduler.txt" "Scheduler selected")
-  if [[ -n "$selected_scheduler" ]]; then
-    "$DOKKU_BIN" scheduler:set "$APP" selected "$selected_scheduler" 2>/dev/null || true
-  fi
-fi
-
-# Restore registry settings
-if [[ -f "$SNAPSHOT_DIR/registry.txt" && -s "$SNAPSHOT_DIR/registry.txt" ]]; then
-  echo "       Restoring registry settings"
-  registry_image_repo=$(parse_report_field "$SNAPSHOT_DIR/registry.txt" "Registry image repo")
-  if [[ -n "$registry_image_repo" ]]; then
-    "$DOKKU_BIN" registry:set "$APP" image-repo "$registry_image_repo" 2>/dev/null || true
-  fi
-  registry_server=$(parse_report_field "$SNAPSHOT_DIR/registry.txt" "Registry server")
-  if [[ -n "$registry_server" ]]; then
-    "$DOKKU_BIN" registry:set "$APP" server "$registry_server" 2>/dev/null || true
-  fi
-  registry_push_on_release=$(parse_report_field "$SNAPSHOT_DIR/registry.txt" "Registry push on release")
-  if [[ -n "$registry_push_on_release" ]]; then
-    "$DOKKU_BIN" registry:set "$APP" push-on-release "$registry_push_on_release" 2>/dev/null || true
-  fi
-fi
-
-# Restore cron settings
-if [[ -f "$SNAPSHOT_DIR/cron.txt" && -s "$SNAPSHOT_DIR/cron.txt" ]]; then
-  echo "       Restoring cron settings"
-  cron_mailto=$(parse_report_field "$SNAPSHOT_DIR/cron.txt" "Cron mailto")
-  if [[ -n "$cron_mailto" ]]; then
-    "$DOKKU_BIN" cron:set "$APP" mailto "$cron_mailto" 2>/dev/null || true
-  fi
-  cron_mailfrom=$(parse_report_field "$SNAPSHOT_DIR/cron.txt" "Cron mailfrom")
-  if [[ -n "$cron_mailfrom" ]]; then
-    "$DOKKU_BIN" cron:set "$APP" mailfrom "$cron_mailfrom" 2>/dev/null || true
-  fi
-fi
-
-# Restore app-json settings
-if [[ -f "$SNAPSHOT_DIR/app-json.txt" && -s "$SNAPSHOT_DIR/app-json.txt" ]]; then
-  echo "       Restoring app-json settings"
-  app_json_selected=$(parse_report_field "$SNAPSHOT_DIR/app-json.txt" "App json selected")
-  if [[ -n "$app_json_selected" ]]; then
-    "$DOKKU_BIN" app-json:set "$APP" selected "$app_json_selected" 2>/dev/null || true
-  fi
-fi
 
 # Restore service data
 if [[ -d "$SNAPSHOT_DIR/services" ]]; then
@@ -405,6 +104,25 @@ if [[ -d "$SNAPSHOT_DIR/services" ]]; then
       fi
     done
   done
+fi
+
+# Restore volumes
+if [[ -d "$SNAPSHOT_DIR/volumes" && -f "$SNAPSHOT_DIR/volumes/manifest.txt" ]]; then
+  while IFS='=' read -r tar_name host_path; do
+    [[ -z "$tar_name" || -z "$host_path" ]] && continue
+    tar_file="$SNAPSHOT_DIR/volumes/$tar_name"
+    if [[ ! -f "$tar_file" ]]; then
+      echo "!      Warning: Volume archive not found: $tar_name" >&2
+      continue
+    fi
+
+    echo "       Restoring volume: $host_path"
+    mkdir -p "$host_path"
+    tar xzf "$tar_file" -C "$host_path" 2>/dev/null || {
+      echo "!      Warning: Failed to restore volume $host_path" >&2
+      continue
+    }
+  done < "$SNAPSHOT_DIR/volumes/manifest.txt"
 fi
 
 echo "-----> Restore complete"

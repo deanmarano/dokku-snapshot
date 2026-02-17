@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+APP="$1"
+HOST_PATH="$2"
+
+if [[ -z "$APP" || -z "$HOST_PATH" ]]; then
+  echo "Usage: dokku snapshot:volume:include <app> <host-path>" >&2
+  exit 1
+fi
+
+# Verify app exists
+if ! "$DOKKU_BIN" apps:exists "$APP" 2>/dev/null; then
+  echo "!     App $APP does not exist" >&2
+  exit 1
+fi
+
+EXCLUDED_FILE="$PLUGIN_DATA_ROOT/$APP/.excluded-volumes"
+
+if [[ ! -f "$EXCLUDED_FILE" ]] || ! grep -qxF "$HOST_PATH" "$EXCLUDED_FILE" 2>/dev/null; then
+  echo "       Volume is not excluded: $HOST_PATH"
+else
+  grep -vxF "$HOST_PATH" "$EXCLUDED_FILE" > "$EXCLUDED_FILE.tmp" || true
+  mv "$EXCLUDED_FILE.tmp" "$EXCLUDED_FILE"
+  echo "       Re-included volume for backup: $HOST_PATH"
+fi

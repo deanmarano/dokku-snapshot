@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 
-# Parse a field value from a Dokku report file.
-# Usage: parse_report_field <file> <field-name>
-# Example: parse_report_field proxy.txt "Proxy type" -> "nginx"
-parse_report_field() {
-  local file="$1" field="$2"
-  grep -oP "${field}:\s*\K.*" "$file" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true
-}
-
 # Detect linked services by listing all services and checking linkage.
 # Outputs lines of: <type> <service-name>
 detect_linked_services() {

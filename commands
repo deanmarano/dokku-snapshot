@@ -11,27 +11,29 @@ show_help() {
   cat << EOF
 usage: dokku snapshot[:COMMAND]
 
-Snapshot and restore entire dokku app stacks.
+Snapshot and restore app data (services and volumes).
 
 dokku snapshot commands:
 
-    snapshot:create <app>                          create a snapshot of an app
-    snapshot:delete <app> <snapshot-id>             delete a snapshot
-    snapshot:export <app> <id> --password <pw>      export encrypted snapshot
-    snapshot:import <app> <file> --password <pw>    import encrypted snapshot
-    snapshot:inspect <app>                         show all current config for an app
-    snapshot:list <app>                            list snapshots for an app
-    snapshot:restore <app> <snapshot-id> [--force]  restore an app from a snapshot
-    snapshot:upload <app> <id> --password <pw>      encrypt and upload snapshot to provider
-    snapshot:download <app> <id> --password <pw>    download and decrypt snapshot from provider
-    snapshot:provider:add <name> --type <type>      create a storage provider profile
-    snapshot:provider:set <name> <key> <value>      set a provider config key
-    snapshot:provider:show <name>                   show provider configuration
-    snapshot:provider:list                          list all configured providers
-    snapshot:provider:delete <name>                 delete a provider profile
-    snapshot:provider:test <name>                   test provider connectivity
-    snapshot:provider:set-default <app> <name>      set default provider for an app
-    snapshot:provider:unset-default <app>            remove default provider for an app
+    snapshot:create <app>                              create a snapshot of an app
+    snapshot:delete <app> <snapshot-id>                 delete a snapshot
+    snapshot:export <app> <id> --password <pw>          export encrypted snapshot
+    snapshot:import <app> <file> --password <pw>        import encrypted snapshot
+    snapshot:list <app>                                list snapshots for an app
+    snapshot:restore <app> <snapshot-id> [--force]      restore an app from a snapshot
+    snapshot:upload <app> <id> --password <pw>          encrypt and upload snapshot to provider
+    snapshot:download <app> <id> --password <pw>        download and decrypt snapshot from provider
+    snapshot:volume:exclude <app> <host-path>           exclude a volume from backup
+    snapshot:volume:include <app> <host-path>           re-include a previously excluded volume
+    snapshot:volume:list <app>                          show all volumes and their backup status
+    snapshot:provider:add <name> --type <type>          create a storage provider profile
+    snapshot:provider:set <name> <key> <value>          set a provider config key
+    snapshot:provider:show <name>                       show provider configuration
+    snapshot:provider:list                              list all configured providers
+    snapshot:provider:delete <name>                     delete a provider profile
+    snapshot:provider:test <name>                       test provider connectivity
+    snapshot:provider:set-default <app> <name>          set default provider for an app
+    snapshot:provider:unset-default <app>                remove default provider for an app
 EOF
 }
 
