@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+# Parse arguments
+DIR=""
+PASSWORD=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --password)
+      PASSWORD="$2"
+      shift 2
+      ;;
+    -*)
+      echo "!     Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      if [[ -z "$DIR" ]]; then
+        DIR="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$DIR" ]]; then
+  echo "Usage: dokku snapshot:import-all <directory> --password <pw>" >&2
+  exit 1
+fi
+
+if [[ ! -d "$DIR" ]]; then
+  echo "!     Directory not found: $DIR" >&2
+  exit 1
+fi
+
+PASSWORD="${PASSWORD:-${SNAPSHOT_PASSWORD:-}}"
+if [[ -z "$PASSWORD" ]]; then
+  echo "!     Password is required. Use --password <pw> or set SNAPSHOT_PASSWORD env var." >&2
+  exit 1
+fi
+
+# Export files are named <app>-<id>.tar.gz.enc where <id> is
+# YYYY-MM-DD_HH-MM-SS; strip the id suffix to recover the app name.
+shopt -s nullglob
+FILES=("$DIR"/*.tar.gz.enc)
+if [[ ${#FILES[@]} -eq 0 ]]; then
+  echo "!     No *.tar.gz.enc snapshot exports found in $DIR" >&2
+  exit 1
+fi
+
+FAILED=()
+for file in "${FILES[@]}"; do
+  base="$(basename "$file" .tar.gz.enc)"
+  app="${base%-????-??-??_??-??-??}"
+  if [[ "$app" == "$base" ]]; then
+    echo "!     Skipping $file: name does not match <app>-<timestamp>.tar.gz.enc" >&2
+    FAILED+=("$file")
+    continue
+  fi
+  if ! "$PLUGIN_BASE/subcommands/import" "$app" "$file" --password "$PASSWORD"; then
+    echo "!     Import failed for $file" >&2
+    FAILED+=("$file")
+  fi
+done
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  echo "!     Failed imports: ${FAILED[*]}" >&2
+  exit 1
+fi
+echo "=====> Imported ${#FILES[@]} snapshots"

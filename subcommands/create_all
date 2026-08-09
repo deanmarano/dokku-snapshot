@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+# Parse arguments
+KEEP=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --keep)
+      KEEP="$2"
+      shift 2
+      ;;
+    -*)
+      echo "!     Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      echo "Usage: dokku snapshot:create-all [--keep <n>]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -n "$KEEP" && ! "$KEEP" =~ ^[1-9][0-9]*$ ]]; then
+  echo "!     --keep must be a positive integer" >&2
+  exit 1
+fi
+
+FAILED=()
+while IFS= read -r app; do
+  if ! "$PLUGIN_BASE/subcommands/create" "$app"; then
+    echo "!     Snapshot failed for $app" >&2
+    FAILED+=("$app")
+    continue
+  fi
+
+  # Retention: keep the newest $KEEP snapshots per app (timestamps sort lexically)
+  if [[ -n "$KEEP" ]]; then
+    while IFS= read -r old; do
+      "$PLUGIN_BASE/subcommands/delete" "$app" "$old"
+    done < <(ls -1 "$PLUGIN_DATA_ROOT/$app" 2>/dev/null | sort -r | tail -n +$((KEEP + 1)))
+  fi
+done < <("$DOKKU_BIN" apps:list 2>/dev/null | tail -n +2)
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  echo "!     Failed apps: ${FAILED[*]}" >&2
+  exit 1
+fi
+echo "=====> Snapshots created for all apps"

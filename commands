@@ -16,9 +16,11 @@ Snapshot and restore app data (services and volumes).
 dokku snapshot commands:
 
     snapshot:create <app>                              create a snapshot of an app
+    snapshot:create-all [--keep <n>]                    snapshot every app, pruning to <n> per app
     snapshot:delete <app> <snapshot-id>                 delete a snapshot
     snapshot:export <app> <id> --password <pw>          export encrypted snapshot
     snapshot:import <app> <file> --password <pw>        import encrypted snapshot
+    snapshot:import-all <dir> --password <pw>           import every exported snapshot in a directory
     snapshot:list <app>                                list snapshots for an app
     snapshot:restore <app> <snapshot-id> [--force]      restore an app from a snapshot
     snapshot:upload <app> <id> --password <pw>          encrypt and upload snapshot to provider

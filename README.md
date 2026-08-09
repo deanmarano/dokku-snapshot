@@ -34,11 +34,13 @@ dokku snapshot:export myapp 2025-06-15_12-30-00 --password mysecret
 | Command | Description |
 |---|---|
 | `snapshot:create <app>` | Create a snapshot of an app |
+| `snapshot:create-all [--keep <n>]` | Snapshot every app, keeping the newest n per app |
 | `snapshot:list <app>` | List snapshots for an app |
 | `snapshot:restore <app> <id> [--force]` | Restore an app from a snapshot |
 | `snapshot:delete <app> <id>` | Delete a snapshot |
 | `snapshot:export <app> <id> --password <pw>` | Export encrypted snapshot |
 | `snapshot:import <app> <file> --password <pw>` | Import encrypted snapshot |
+| `snapshot:import-all <dir> --password <pw>` | Import every exported snapshot in a directory |
 | `snapshot:upload <app> <id> --password <pw>` | Encrypt and upload to provider |
 | `snapshot:download <app> <id> --password <pw>` | Download and decrypt from provider |
 | `snapshot:volume:exclude <app> <path>` | Exclude a volume from backup |
