@@ -28,5 +28,5 @@ if [[ -f "$EXCLUDED_FILE" ]] && grep -qxF "$HOST_PATH" "$EXCLUDED_FILE" 2>/dev/n
   echo "       Volume already excluded: $HOST_PATH"
 else
   echo "$HOST_PATH" >> "$EXCLUDED_FILE"
-  echo "       Excluded volume from backup: $HOST_PATH"
+  echo "       Excluded volume from backup ($APP): $HOST_PATH"
 fi

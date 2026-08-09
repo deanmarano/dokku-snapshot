@@ -27,5 +27,5 @@ if [[ ! -f "$EXCLUDED_FILE" ]] || ! grep -qxF "$HOST_PATH" "$EXCLUDED_FILE" 2>/d
 else
   grep -vxF "$HOST_PATH" "$EXCLUDED_FILE" > "$EXCLUDED_FILE.tmp" || true
   mv "$EXCLUDED_FILE.tmp" "$EXCLUDED_FILE"
-  echo "       Re-included volume for backup: $HOST_PATH"
+  echo "       Re-included volume for backup ($APP): $HOST_PATH"
 fi
