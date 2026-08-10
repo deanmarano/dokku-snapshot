@@ -23,6 +23,7 @@ dokku snapshot commands:
     snapshot:import-all <dir> --password <pw>           import every exported snapshot in a directory
     snapshot:list <app>                                list snapshots for an app
     snapshot:restore <app> <snapshot-id> [--force]      restore an app from a snapshot
+    snapshot:restore-all [--force]                      restore every app from its latest snapshot
     snapshot:upload <app> <id> --password <pw>          encrypt and upload snapshot to provider
     snapshot:download <app> <id> --password <pw>        download and decrypt snapshot from provider
     snapshot:volume:exclude <app> <host-path>           exclude a volume from backup

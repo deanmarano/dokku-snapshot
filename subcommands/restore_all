@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -eo pipefail
+[[ $DOKKU_TRACE ]] && set -x
+
+PLUGIN_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PLUGIN_BASE/config"
+
+[[ "${1:-}" == snapshot:* ]] && shift
+
+# Parse arguments
+FORCE_FLAG=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force|-f)
+      FORCE_FLAG=(--force)
+      shift
+      ;;
+    -*)
+      echo "!     Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      echo "Usage: dokku snapshot:restore-all [--force]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ ! -d "$PLUGIN_DATA_ROOT" ]]; then
+  echo "!     No snapshots found at $PLUGIN_DATA_ROOT" >&2
+  exit 1
+fi
+
+RESTORED=0
+FAILED=()
+for app_dir in "$PLUGIN_DATA_ROOT"/*/; do
+  [[ -d "$app_dir" ]] || continue
+  app="$(basename "$app_dir")"
+
+  # Newest snapshot: timestamp ids sort lexically
+  latest="$(ls -1 "$app_dir" 2>/dev/null | sort -r | head -1)"
+  if [[ -z "$latest" ]]; then
+    echo "!     No snapshots for $app, skipping" >&2
+    continue
+  fi
+
+  echo "-----> Restoring $app from $latest"
+  if "$PLUGIN_BASE/subcommands/restore" "$app" "$latest" "${FORCE_FLAG[@]}"; then
+    RESTORED=$((RESTORED + 1))
+  else
+    echo "!     Restore failed for $app" >&2
+    FAILED+=("$app")
+  fi
+done
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  echo "!     Restored $RESTORED apps; failed: ${FAILED[*]}" >&2
+  exit 1
+fi
+echo "=====> Restored $RESTORED apps from their latest snapshots"
