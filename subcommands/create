@@ -63,7 +63,7 @@ if [[ ${#all_mounts[@]} -gt 0 ]]; then
       continue
     fi
 
-    if [[ ! -d "$host_path" ]]; then
+    if [[ ! -e "$host_path" ]]; then
       echo "       Skipping missing volume: $host_path"
       continue
     fi
@@ -73,11 +73,27 @@ if [[ ${#all_mounts[@]} -gt 0 ]]; then
     tar_file="$SNAPSHOT_DIR/volumes/${sanitized}.tar.gz"
 
     echo "       Backing up volume: $host_path"
-    tar czf "$tar_file" -C "$host_path" . 2>/dev/null || {
+    if [[ -d "$host_path" ]]; then
+      tar_args=(-C "$host_path" .)
+    else
+      # single-file volume (e.g. a mounted config file)
+      tar_args=(-C "$(dirname "$host_path")" "$(basename "$host_path")")
+    fi
+    tar_err=$(mktemp)
+    set +e
+    tar czf "$tar_file" "${tar_args[@]}" 2>"$tar_err"
+    tar_rc=$?
+    set -e
+    if [[ $tar_rc -eq 1 ]]; then
+      # exit 1 = "file changed as we read it" etc.; archive is still valid
+      echo "       Note: volume changed during backup (archive kept): $host_path"
+    elif [[ $tar_rc -ne 0 ]]; then
       echo "!      Warning: Failed to backup volume $host_path" >&2
-      rm -f "$tar_file"
+      sed 's/^/!        /' "$tar_err" | head -3 >&2
+      rm -f "$tar_file" "$tar_err"
       continue
-    }
+    fi
+    rm -f "$tar_err"
     echo "${sanitized}.tar.gz=$host_path" >> "$SNAPSHOT_DIR/volumes/manifest.txt"
   done
 fi
