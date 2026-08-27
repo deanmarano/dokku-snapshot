@@ -43,7 +43,13 @@ while read -r svc_type svc_name <&3; do
   echo "       Exporting $svc_type service: $svc_name"
   mkdir -p "$SNAPSHOT_DIR/services/$svc_type"
   export_service_info "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.info"
-  export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
+  if [[ "$svc_type" == "memcached" ]]; then
+    # memcached is a volatile cache with no export command; the .info is
+    # enough for restore to recreate and relink it
+    echo "       Skipping data export for $svc_type (cache service, no data to export)"
+  else
+    export_service "$svc_type" "$svc_name" "$SNAPSHOT_DIR/services/$svc_type/$svc_name.dump" || true
+  fi
 done 3< <(detect_linked_services "$APP") || true
 
 # Backup storage volumes
