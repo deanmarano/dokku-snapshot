@@ -39,7 +39,7 @@ for app_dir in "$PLUGIN_DATA_ROOT"/*/; do
   app="$(basename "$app_dir")"
 
   # Newest snapshot: timestamp ids sort lexically
-  latest="$(ls -1 "$app_dir" 2>/dev/null | sort -r | head -1)"
+  latest="$(find "$app_dir" -mindepth 1 -maxdepth 1 ! -name '.*' -printf '%f\n' 2>/dev/null | sort -r | head -1)"
   if [[ -z "$latest" ]]; then
     echo "!     No snapshots for $app, skipping" >&2
     continue
