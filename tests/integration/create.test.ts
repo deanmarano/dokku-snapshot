@@ -37,6 +37,14 @@ describe('snapshot:create', () => {
     expect(dokku.pathExists(`${snapshotDir}/services`)).toBe(true);
   });
 
+  it('makes snapshot files readable only by the owner', () => {
+    const modes = dokku.fileModes(snapshotDir);
+    expect(modes.length).toBeGreaterThan(1);
+    // no group or other permission bits on any file or directory
+    const exposed = modes.filter((line) => !/^[0-7]?[0-7]00 /.test(line));
+    expect(exposed).toEqual([]);
+  });
+
   it('captures v4 metadata with app name and timestamp', () => {
     const metadata = JSON.parse(
       dokku.readFile(`${snapshotDir}/metadata.json`)

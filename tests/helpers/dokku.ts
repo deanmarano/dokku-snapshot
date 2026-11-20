@@ -388,4 +388,16 @@ export class DokkuSnapshot {
       return [];
     }
   }
+
+  /** Octal permission modes of a path and everything under it, as "mode path" lines */
+  fileModes(path: string): string[] {
+    const find = `find ${path} -printf '%m %p\\n'`;
+    let cmd: string;
+    if (this.isRemote()) {
+      cmd = `ssh -o StrictHostKeyChecking=no -p ${DOKKU_SSH_PORT} dokku@${DOKKU_HOST} "${find}"`;
+    } else {
+      cmd = USE_SUDO ? `sudo ${find}` : find;
+    }
+    return execSync(cmd, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+  }
 }
