@@ -5,6 +5,9 @@ set -eo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
 source "$PLUGIN_BASE_PATH/functions"
 
+# Snapshot data and provider credentials must not be readable by other users
+umask 077
+
 [[ "${1:-}" == snapshot:* ]] && shift
 
 APP="$1"

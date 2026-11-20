@@ -9,4 +9,9 @@ mkdir -p "$PLUGIN_DATA_ROOT/.providers"
 
 chown -R "${DOKKU_SYSTEM_USER:-dokku}:${DOKKU_SYSTEM_GROUP:-dokku}" "$PLUGIN_DATA_ROOT" 2>/dev/null || true
 
+# Snapshots hold database dumps, volume data and provider credentials:
+# keep them readable only by the dokku user. Older versions created them
+# group/world-readable, so tighten anything already on disk.
+chmod -R go-rwx "$PLUGIN_DATA_ROOT"
+
 echo "-----> Snapshot plugin installed successfully"

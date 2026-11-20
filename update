@@ -1,2 +1,5 @@
 #!/usr/bin/env bash
 set -eo pipefail
+
+# Re-run install so data directory permissions are fixed on upgrade
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install"
